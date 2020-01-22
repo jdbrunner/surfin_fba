@@ -14,8 +14,7 @@ except:
 
 import matplotlib.pyplot as plt
 from scipy.integrate import ode
-# from cobra import util
-# import json
+
 import pandas as pd
 import time
 from joblib import Parallel, delayed, cpu_count
@@ -190,9 +189,6 @@ def prep_cobrapy_models(models,extracell = 'e', random_nums = []):
     return real_model,masterlist,mastery0,namemap
 
 
-#Gamma1,Gamma2,alphas,obje,initial_N,low_exch,up_int,low_int,death
-#Gamma1,Gamma2,kaps,lilgamma,y0,lbds_ex_min,upbds_int,lbds_int,death[i]
-#Gamma1,Gamma2,lilgamma,lbds_int,upbds_int,kaps,lbds_ex = model_list[i]
 def prep_indv_model(Gamma1,Gamma2,obje,low_int,up_int,alphas,low_exch,initial_N,death,secondobj = [],report_activity = True, solver = 'gb',flobj = None):
 
     t1 = time.time()
@@ -984,7 +980,7 @@ def evolve_comm(t,y,all_params):
 
     return np.concatenate([xds,Nds])
 
-def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'gb',enoughalready = 10,flobj = None):
+def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'both',enoughalready = 10,flobj = None):
     '''
     Dynamic Flux Balance Analysis for a community of organims.
 
@@ -1003,11 +999,40 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
     '''
 
     if solver =='both':
-        solver1 = 'cp'
-        solver2 = 'gb'
-    else:
-        solver1 = solver
-        solver2 = solver
+        try:
+            dir(cp)
+            dir(gb)
+            solver1 = 'cp'
+            solver2 = 'gb'
+        except:
+            try:
+                dir(gb)
+                solver1 = 'gb'
+                solver2 = 'gb'
+                print('Cplex not found, using Gurobi')
+            except:
+                solver1 = 'cp'
+                solver2 = 'cp'
+                print('Gurobi not found, using Cplex')
+    elif solver == 'gb':
+        try:
+            dir('gb')
+            solver1 = 'gb'
+            solver2 = 'gb'
+        except:
+            print('Gurobi not found, using Cplex')
+            solver1 = 'cp'
+            solver2 = 'cp'
+    elif solver == 'cp':
+        try:
+            dir('cp')
+            solver1 = 'cp'
+            solver2 = 'cp'
+        except:
+            print('Cplex not found, using Gurobi')
+            solver1 = 'gb'
+            solver2 = 'gb'
+
 
     mess = 'Complete'
 
