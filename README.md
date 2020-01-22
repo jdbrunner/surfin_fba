@@ -24,13 +24,13 @@ met_out = dict([(ky,0) for ky in metabolite_list])
 with open("real_model_log.txt",'w') as logfl:
     x,y,v,t = surf.Surfin_FBA(modelllist,x0,initial_metabolites,death_rates,met_in,met_out,endt,model_names = xnsm,metabolite_names = metabolite_list,concurrent = False,solver = 'both', flobj = logfl,report_activity = True, detail_activity = True)
 
-
+Surfin_FBA parameters:
 model_list (positional) - list or dictionary of models as returned by prep_cobrapy_models
 
 x0 (positional) - list or dictionary: initial microbial biomass
 
 y0 (positional) - list or dictionary: initial metabolite biomass
-\
+
 death (positional) - list or dict: microbial dilution or death rates
 
 met_in (positional) - list or dict: metabolite inflow rates
