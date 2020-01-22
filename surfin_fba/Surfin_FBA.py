@@ -29,7 +29,10 @@ def get_expr_coos(expr, var_indices):
 
 
 
-def prep_cobrapy_models(models,extracell = 'e', random_nums = []):
+def prep_cobrapy_models(models,uptake_dicts,extracell = 'e', random_nums = []):
+
+    #can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolite1:val,metabolite2:val}}
+
     from cobra import util
 
     metaabs = {}
@@ -39,10 +42,11 @@ def prep_cobrapy_models(models,extracell = 'e', random_nums = []):
     nametoid = {}
     nametorxnid = {}
     urts = {}
-    if len(random_nums) == 0:
-        random_nums = np.load('random_stream.npy')
+    if len(uptake_dicts) == 0:
+        if len(random_nums) == 0:
+            random_nums = np.load('random_stream.npy')
 
-    rand_str_loc = 0
+        rand_str_loc = 0
 
     for modelkey in models.keys():
         model = models[modelkey]
@@ -55,13 +59,18 @@ def prep_cobrapy_models(models,extracell = 'e', random_nums = []):
             exchng_metabolite_names += [model.metabolites.get_by_id(met).name]
             exchng_reactions += [rxn.id for rxn in model.metabolites.get_by_id(met).reactions if 'EX_' in rxn.id]
         nutrient_concentrations = {}
-        if rand_str_loc < len(random_nums):
-            uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
-            rand_str_loc = rand_str_loc + len(exchng_reactions)
+        if len(uptake_dicts) ==0:
+            if rand_str_loc < len(random_nums):
+                uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                rand_str_loc = rand_str_loc + len(exchng_reactions)
+                uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+            else:
+                print("prep_cobrapy_models:Need more random numbers.")
         else:
-            print("prep_cobrapy_models:Need more random numbers.")
+            uptkdict = uptake_dicts[modelkey]
+            uptake_rate = [uptkdict[met] for met in exchng_metabolite_names]
 
-        uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+
         i = 0
 
 

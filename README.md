@@ -3,7 +3,9 @@ Dynamic FBA for use with COBRApy metabolic models.
 To use dFBA, first format the desired models using prep_cobrapy_models, which takes as input
 a COBRApy model and outputs a model in the format used by surfin_fba.
 
-prep_cobrapy_models(cobra_models: dictionary of models, random_nums=random_numbers: list of saved random numbers (for debugging))#returns dict,list,dict
+prep_cobrapy_models(cobra_models: dictionary of models,, uptake_dicts = {}: dict of dicts, random_nums=random_numbers: list of saved random numbers (for debugging) for random uptake rates)#returns dict,list,dict
+
+#can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolitename1:val,metabolitename2:val}}
 
 next, run surfin_fba
 
