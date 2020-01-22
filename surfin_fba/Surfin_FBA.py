@@ -29,7 +29,7 @@ def get_expr_coos(expr, var_indices):
 
 
 
-def prep_cobrapy_models(models,uptake_dicts,extracell = 'e', random_nums = []):
+def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = []):
 
     #can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolite1:val,metabolite2:val}}
 
