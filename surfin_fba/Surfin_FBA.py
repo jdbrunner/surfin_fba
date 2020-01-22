@@ -1104,7 +1104,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
     numjobs = min(len(model_list),cpu_count())
 
     if concurrent:
-        preps = dict(Parallel(n_jobs=numjobs)(delayed(lambda i: (i,prep_indv_model(*model_list[i],y0,death[i],report_activity = 0,solver = solver1,flobj = flobj)))(i) for i in range(len(model_list))))
+        preps = dict(Parallel(n_jobs=numjobs)(delayed(lambda i: (i,prep_indv_model(*model_list[i],y0,death[i],report_activity = 0,solver = solver1,flobj = None)))(i) for i in range(len(model_list))))
     else:
         preps = dict([(i,prep_indv_model(*model_list[i],y0,death[i],report_activity = 1,solver = solver1,flobj = flobj)) for i in range(len(model_list))])
 
