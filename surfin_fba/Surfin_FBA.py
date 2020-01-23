@@ -35,6 +35,11 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = 
 
     from cobra import util
 
+    if not isinstance(models,dict):
+        modeldict = {}
+        for mod in models:
+            modeldict[mod.name] = mod
+
     metaabs = {}
     y0s = {}
     exrn = {}
