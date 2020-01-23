@@ -1105,9 +1105,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
 
     #The models can be passed in a dict!
     if isinstance(model_list,dict):
-        model_list0 = np.zeros(len(model_list))
-        for nm in model_list.keys():
-            model_list0[np.where(np.array(model_names) == nm)] = model_list[nm]
+        model_list0 = [model_list[nm] for nm in model_names]#
         model_list = model_list0
         model_list0 = 0
 
