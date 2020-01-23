@@ -1,18 +1,15 @@
 import numpy as np
-import scipy as sp
-import sys
 
 try:
     import cplex as cp
-except:
-    None
+except ImportError:
+    pass
 
 try:
     import gurobipy as gb
-except:
-    None
+except ImportError:
+    pass
 
-import matplotlib.pyplot as plt
 from scipy.integrate import ode
 
 import pandas as pd
@@ -1030,7 +1027,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
                 print('Gurobi not found, using Cplex')
     elif solver == 'gb':
         try:
-            dir('gb')
+            dir(gb)
             solver1 = 'gb'
             solver2 = 'gb'
         except:
@@ -1039,7 +1036,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
             solver2 = 'cp'
     elif solver == 'cp':
         try:
-            dir('cp')
+            dir(cp)
             solver1 = 'cp'
             solver2 = 'cp'
         except:
