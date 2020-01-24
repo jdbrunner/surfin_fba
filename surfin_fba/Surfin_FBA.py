@@ -203,16 +203,16 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = 
 def prep_indv_model(Gamma1,Gamma2,obje,low_int,up_int,alphas,low_exch,initial_N,death,secondobj = [],report_activity = True, solver = 'gb',flobj = None):
 
     t1 = time.time()
-
+    Gamma1 = Gamma1.astype(float)
+    Gamma2 = Gamma2.astype(float)
+    obje = obje.astype(float)
+    low_int = low_int.astype(float)
+    up_int = up_int.astype(float)####Should check to make sure all LB <= UB
+    alphas = alphas.astype(float)
+    low_exch = np.minimum(low_exch,alphas*initial_N)
 
     if solver == 'gb':
-        Gamma1 = Gamma1.astype(float)
-        Gamma2 = Gamma2.astype(float)
-        obje = obje.astype(float)
-        low_int = low_int.astype(float)
-        up_int = up_int.astype(float)####Should check to make sure all LB <= UB
-        alphas = alphas.astype(float)
-        low_exch = np.minimum(low_exch,alphas*initial_N)
+
 
 
 
@@ -356,6 +356,23 @@ def prep_indv_model(Gamma1,Gamma2,obje,low_int,up_int,alphas,low_exch,initial_N,
         growth.solve()
 
         status = growth.solution.get_status()
+        statusdic = {1:"OPTIMAL",3:"INFEASIBLE",4:"INF_OR_UNBD",2:"UNBOUNDED"}
+
+
+        if status in statusdic.keys():
+            if report_activity:
+                try:
+                    flobj.write("find_waves: LP Status: " +  statusdic[status] + '\n')
+                except:
+                    print("find_waves: LP Status: ", statusdic[status])
+        else:
+            if report_activity:
+                try:
+                    flobj.write("find_waves: LP Status: Other\n")
+                except:
+                    print("find_waves: LP Status: Other")
+
+
 
         if status == 1:
 
@@ -1143,7 +1160,6 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
         preps = dict([(i,prep_indv_model(*model_list[i],y0,death[i],report_activity = 1,solver = solver1,flobj = flobj)) for i in range(len(model_list))])
 
 
-
     if "failed to prep" in preps.values():
         if report_activity:
             t2 = time.time() - t1
@@ -1152,7 +1168,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
                 flobj.write("Surfin_FBA: Failed to prep models  in " + str(int(minuts)) + " minutes, " + str(sec) + " seconds.\n")
             except:
                 print("Surfin_FBA: Failed to prep models  in ",int(minuts)," minutes, ",sec," seconds.")
-        return None,None,None,None
+        return None,None,None,None,None
 
 
     yd0 = sum([-x0[i]*np.dot(preps[i][1][3],preps[i][0]) for i in range(len(model_list))])
@@ -1226,7 +1242,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
                 flobj.write("Surfin_FBA: Failed  in " + str(int(minuts)) + " minutes, " + str(sec) + " seconds.\n")
             except:
                 print("Surfin_FBA: Failed  in ",int(minuts)," minutes, ",sec," seconds.")
-        return None,None,None,None
+        return None,None,None,None,None
 
 
 
@@ -1247,8 +1263,11 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
 
     x = [x0]###list of arrays of xs
     y = [y0]###list of arrays of ys
-    v = [initial_vs]### List of list of arrays of vs. So v[i][j][k] is vk for organism x[j] and time t[i]
+    v = [initial_vs]### List of list of arrays of vs. So v[i][j][k] is v[k] for organism x[j] and time t[i]
     t = [0]
+
+    ydparts = [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),paramlist2[i])[1] for i in range(len(model_list))]]### List of list of arrays of vs. So ydpart[i][j][k] is organism x[j]'s contribution to ydot[k] at time t[i]
+
     # tn = 0
     ok = [True]
 
@@ -1304,6 +1323,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
             y += [y_t]
             v += [v_t]
             t += [dfba.t]
+            ydparts += [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),paramlist2[i])[1] for i in range(len(model_list))]]
             notmoving = False
             if resolution < initres:
                 resolution = resolution*5
@@ -1433,9 +1453,14 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
     x = np.array(x)
     biomasses = {}
     internal_flux = {}
+    ydotconts = {}
+    ydparts = np.array(ydparts)
     for i in range(len(x0)):
         biomasses[model_names[i]] = x[:,i]
         internal_flux[model_names[i]] = [vv[i] for vv in v]
+        ydotconts[model_names[i]] = {}
+        for j in range(len(y0)):
+            ydotconts[model_names[i]][metabolite_names[j]] = ydparts[:,i,j]
     y = np.array(y)
     metabolite_bioms = {}
     for i in range(len(y0)):
@@ -1456,4 +1481,4 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
         print("Surfin_FBA: Required ",reinits," reinitializations.")
 
 
-    return biomasses,metabolite_bioms,internal_flux,t
+    return biomasses,metabolite_bioms,internal_flux,t,ydotconts

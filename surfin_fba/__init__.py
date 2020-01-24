@@ -14,7 +14,7 @@ except:
     nosolver += 1
 
 if nosolver == 2:
-    print("Surfin_FBA requires either CPLEX or GUROBI python modules installed.")
+    print("Surfin_FBA requires either CPLEX or GUROBI with associated python modules installed.")
     sys.exit()
 
 from surfin_fba.Surfin_FBA import *

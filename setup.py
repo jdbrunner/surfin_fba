@@ -17,7 +17,7 @@ except:
 setuptools.setup(
     name="surfin_fba",
     version="0.6",
-    author="James Brunner, Ph.D.",
+    author="James D. Brunner, Ph.D.",
     author_email="brunner.james@mayo.edu",
     description="Dynamic FBA for use with COBRApy metabolic models",
     long_description=long_description,
