@@ -17,6 +17,255 @@ import time
 from joblib import Parallel, delayed, cpu_count
 
 
+
+# [Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds]
+
+class SurfMod:
+    def __init__(self,G1,G2,lilg,ilbs,iubs,kaps,elbs,Name = None,deathrate = 0):
+        self.Gamma1 = G1
+        self.Gamma2 = G2
+        self.objective = lilg
+        self.intLB = ilbs
+        self.intUB = iubs
+        self.uptakes = kaps
+        self.exchgLB = elbs
+        if Name == None:
+            self.Name = ''.join([str(np.random.choice(list('abcdefg123456789'))) for n in range(5)])
+        else:
+            self.Name = Name
+        self.MatrixA =  np.concatenate([G1,-G1,np.eye(G1.shape[1]),-np.eye(G1.shape[1])],axis = 0)
+        self.statbds = np.empty(0)
+        self.deathrate = deathrate
+
+    def prep_indv_model(self,initial_N,secondobj = [],report_activity = True, solver = 'gb',flobj = None):
+
+        Gamma1 = self.Gamma1
+        Gamma2 = self.Gamma2
+        obje = self.objective
+        low_int = self.intLB
+        up_int = self.intUB
+        alphas = self.uptakes
+        low_exch = self.exchgLB
+        MatrixA = self.MatrixA
+
+        t1 = time.time()
+        Gamma1 = Gamma1.astype(float)
+        Gamma2 = Gamma2.astype(float)
+        obje = obje.astype(float)
+        low_int = low_int.astype(float)
+        up_int = up_int.astype(float)####Should check to make sure all LB <= UB
+        alphas = alphas.astype(float)
+        low_exch = np.minimum(low_exch,alphas*initial_N)
+
+        if solver == 'gb':
+
+
+
+
+            # MatrixA = np.concatenate([Gamma1,-Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0)
+            upbds_exch = initial_N*alphas
+
+            if report_activity:
+                try:
+                    flobj.write("prep_indv_model: initializing LP\n")
+                except:
+                    print("prep_indv_model: initializing LP")
+            growth = gb.Model("growth")
+            growth.setParam( 'OutputFlag', False )
+
+
+            sparms = [growth.addVar(lb = - gb.GRB.INFINITY,ub = gb.GRB.INFINITY, name = "s" + str(i)) for i in range(MatrixA.shape[1])]
+            growth.update()
+            objv = gb.quicksum([a[0]*a[1] for a in zip(obje,sparms)])
+            growth.setObjective(objv,gb.GRB.MAXIMIZE)
+
+            bds_vec = np.concatenate([upbds_exch,-low_exch,up_int,-low_int])
+            if report_activity:
+                try:
+                    flobj.write("prep_indv_model: Adding constraints\n")
+                except:
+                    print("prep_indv_model: Adding constraints")
+
+            growth.addConstrs((gb.quicksum([MatrixA[i][l]*sparms[l] for l in range(len(sparms))]) <= bds_vec[i] for i in range(len(MatrixA))), name = 'LE')
+            growth.addConstrs((gb.quicksum([Gamma2[i][l]*sparms[l] for l in range(len(sparms))]) == 0 for i in range(len(Gamma2))), name = 'Kernal')
+            growth.update()
+
+            if report_activity:
+                try:
+                    flobj.write("prep_indv_model: optimizing LP\n")
+                    flobj.write("prep_indv_model: optimizing with " + str(len(growth.getConstrs())) + " constraints\n" )
+                except:
+                    print("prep_indv_model: optimizing LP")
+                    print("prep_indv_model: optimizing with ",len(growth.getConstrs()) ," constraints" )
+            growth.optimize()
+
+
+            status = growth.status
+            # if status == 2:
+            #
+            # print(status)
+
+            statusdic = {1:"LOADED",2:"OPTIMAL",3:"INFEASIBLE",4:"INF_OR_UNBD",5:"UNBOUNDED"}
+            if status in statusdic.keys():
+                if report_activity:
+                    try:
+                        flobj.write("find_waves: LP Status: " +  statusdic[status] + '\n')
+                    except:
+                        print("find_waves: LP Status: ", statusdic[status])
+            else:
+                if report_activity:
+                    try:
+                        flobj.write("find_waves: LP Status: Other\n")
+                    except:
+                        print("find_waves: LP Status: Other")
+
+            if status == 2:
+
+
+                # wi = np.array([v.x for v in growth.getVars()])#growth.solution.get_values()
+                val = growth.objVal
+
+                if len(secondobj) != len(sparms):#if not given a valid second objective, minimize total flux
+                    secondobj = -np.ones(len(sparms))
+
+
+                growth.addConstr(objv == val)
+                growth.update()
+                newobj = gb.quicksum([a[0]*a[1] for a in zip(secondobj,sparms)])
+                growth.setObjective(newobj,gb.GRB.MAXIMIZE)
+                growth.update()
+                growth.optimize()
+
+                wi = np.array([v.x for v in growth.getVars()])
+
+
+
+                static2 = np.concatenate([-low_exch,up_int,-low_int])
+                if report_activity:
+                    minuts,sec = divmod(time.time() - t1, 60)
+                    try:
+                        flobj.write("prep_indv_model: Done in " + str(int(minuts)) + " minutes, " + str(sec) + " seconds.\n")
+                    except:
+                        print("prep_indv_model: Done in ",int(minuts)," minutes, ",sec," seconds.")
+
+
+                self.statbds = static2
+                return wi#,(MatrixA,static2,alphas,Gamma1,Gamma2,obje,death)
+            else:
+                return "failed to prep"
+
+        elif solver == 'cp':
+    #
+            MatrixA = np.concatenate([Gamma1,-Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0).astype(float)
+            Gamma2 = Gamma2.astype(float)
+            upbds_exch = initial_N*alphas
+
+            if report_activity:
+                try:
+                    flobj.write("prep_indv_model: initializing LP\n")
+                except:
+                    print("prep_indv_model: initializing LP")
+
+
+
+
+            growth = cp.Cplex()
+
+
+            sparms = ["s" + str(i) for i in range(MatrixA.shape[1])]
+            s_lbs = [-cp.infinity]*MatrixA.shape[1]
+            s_ubs = [cp.infinity]*MatrixA.shape[1]
+
+            growth.variables.add(obj = obje, lb = s_lbs, ub = s_ubs, names = sparms)
+            growth.objective.set_sense(growth.objective.sense.maximize)
+
+            growth.set_results_stream(None)
+            growth.set_warning_stream(None)
+
+            if report_activity:
+                try:
+                    flobj.write("prep_indv_model: Adding constraints\n")
+                except:
+                    print("prep_indv_model: Adding constraints")
+
+            bdtypes = np.array(['L']*len(MatrixA) + ['E']*len(Gamma2))
+            bds_vec = np.concatenate([upbds_exch,-low_exch,up_int,-low_int,np.zeros(len(Gamma2))])
+
+
+            g1p2 = [list(g) for g in MatrixA] + [list(g) for g in Gamma2]
+            g1p2_wi = [[sparms, g] for g in g1p2]
+            growth.linear_constraints.add(lin_expr = g1p2_wi, senses = bdtypes,  rhs = bds_vec)
+            if report_activity:
+                try:
+                    flobj.write("prep_indv_model: optimizing LP\n")
+                except:
+                    print("prep_indv_model: optimizing LP")
+            growth.solve()
+
+            status = growth.solution.get_status()
+            statusdic = {1:"OPTIMAL",3:"INFEASIBLE",4:"INF_OR_UNBD",2:"UNBOUNDED"}
+
+
+            if status in statusdic.keys():
+                if report_activity:
+                    try:
+                        flobj.write("find_waves: LP Status: " +  statusdic[status] + '\n')
+                    except:
+                        print("find_waves: LP Status: ", statusdic[status])
+            else:
+                if report_activity:
+                    try:
+                        flobj.write("find_waves: LP Status: Other\n")
+                    except:
+                        print("find_waves: LP Status: Other")
+
+
+
+            if status == 1:
+
+                # wi = np.array([growth.solution.get_values("s"+str(i)) for i in range(MatrixA.shape[1])])
+                # wi2 = np.array(growth.solution.get_values()) This should be the same but you never freaking know.
+
+                val = growth.solution.get_objective_value()
+
+                if len(secondobj) != len(sparms):#if not given a valid second objective, minimize total flux
+                    secondobj = -np.ones(len(sparms)).astype(float)
+                else:
+                    secondobj = np.array(secondobj).astype(float)
+
+                new_const = [sparms,list(obje)]
+                growth.linear_constraints.add(lin_expr = [new_const], senses = ['E'], rhs = [val])
+                newobj = [(sparms[i],secondobj[i]) for i in range(len(sparms))]
+                growth.objective.set_linear(newobj)
+                growth.solve()
+
+                wi = np.array([growth.solution.get_values("s"+str(i)) for i in range(MatrixA.shape[1])])
+
+
+
+
+                static2 = np.concatenate([-low_exch,up_int,-low_int])
+                if report_activity:
+                    minuts,sec = divmod(time.time() - t1, 60)
+                    try:
+                        flobj.write("prep_indv_model: Done in " + str(int(minuts)) + " minutes " + str(sec) + " seconds.\n")
+                    except:
+                        print("prep_indv_model: Done in ",int(minuts)," minutes, ",sec," seconds.")
+
+                self.statbds
+                return wi#,(MatrixA,static2,alphas,Gamma1,Gamma2,obje,death)
+
+
+            else:
+                return "failed to prep"
+
+
+        else:
+            print("Please select solver Gurobi: 'gb' or CPlex: 'cp'")
+            return "failed to prep"
+
+
+
 def get_expr_coos(expr, var_indices):
     rw = np.zeros(len(var_indices))
     wherewhat = [(var_indices[expr.getVar(i)],expr.getCoeff(i)) for i in range(expr.size())]
@@ -192,228 +441,14 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = 
 
         kappas = np.array([urts[model.name][nm] if nm in urts[model.name].keys() else 0 for nm in masterlist])
 
-        # print(Gamma1ar.shape,len(internal_lower_bounds),len(internal_upper_bounds),len(exchng_lower_bounds),len(kappas))
-        real_model[model.name] = [Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds]
-        namemap[modelkey] = model.name
+        real_model[modelkey] = SurfMod(Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds,model.name)
+        #[Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds]
+        # namemap[modelkey] = model.name
 
 
-    return real_model,masterlist,mastery0,namemap
+    return real_model,masterlist,mastery0
 
 
-def prep_indv_model(Gamma1,Gamma2,obje,low_int,up_int,alphas,low_exch,initial_N,death,secondobj = [],report_activity = True, solver = 'gb',flobj = None):
-
-    t1 = time.time()
-    Gamma1 = Gamma1.astype(float)
-    Gamma2 = Gamma2.astype(float)
-    obje = obje.astype(float)
-    low_int = low_int.astype(float)
-    up_int = up_int.astype(float)####Should check to make sure all LB <= UB
-    alphas = alphas.astype(float)
-    low_exch = np.minimum(low_exch,alphas*initial_N)
-
-    if solver == 'gb':
-
-
-
-
-        MatrixA = np.concatenate([Gamma1,-Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0)
-        upbds_exch = initial_N*alphas
-
-        if report_activity:
-            try:
-                flobj.write("prep_indv_model: initializing LP\n")
-            except:
-                print("prep_indv_model: initializing LP")
-        growth = gb.Model("growth")
-        growth.setParam( 'OutputFlag', False )
-
-
-        sparms = [growth.addVar(lb = - gb.GRB.INFINITY,ub = gb.GRB.INFINITY, name = "s" + str(i)) for i in range(MatrixA.shape[1])]
-        growth.update()
-        objv = gb.quicksum([a[0]*a[1] for a in zip(obje,sparms)])
-        growth.setObjective(objv,gb.GRB.MAXIMIZE)
-
-        bds_vec = np.concatenate([upbds_exch,-low_exch,up_int,-low_int])
-        if report_activity:
-            try:
-                flobj.write("prep_indv_model: Adding constraints\n")
-            except:
-                print("prep_indv_model: Adding constraints")
-
-        growth.addConstrs((gb.quicksum([MatrixA[i][l]*sparms[l] for l in range(len(sparms))]) <= bds_vec[i] for i in range(len(MatrixA))), name = 'LE')
-        growth.addConstrs((gb.quicksum([Gamma2[i][l]*sparms[l] for l in range(len(sparms))]) == 0 for i in range(len(Gamma2))), name = 'Kernal')
-        growth.update()
-
-        if report_activity:
-            try:
-                flobj.write("prep_indv_model: optimizing LP\n")
-                flobj.write("prep_indv_model: optimizing with " + str(len(growth.getConstrs())) + " constraints\n" )
-            except:
-                print("prep_indv_model: optimizing LP")
-                print("prep_indv_model: optimizing with ",len(growth.getConstrs()) ," constraints" )
-        growth.optimize()
-
-
-        status = growth.status
-        # if status == 2:
-        #
-        # print(status)
-
-        statusdic = {1:"LOADED",2:"OPTIMAL",3:"INFEASIBLE",4:"INF_OR_UNBD",5:"UNBOUNDED"}
-        if status in statusdic.keys():
-            if report_activity:
-                try:
-                    flobj.write("find_waves: LP Status: " +  statusdic[status] + '\n')
-                except:
-                    print("find_waves: LP Status: ", statusdic[status])
-        else:
-            if report_activity:
-                try:
-                    flobj.write("find_waves: LP Status: Other\n")
-                except:
-                    print("find_waves: LP Status: Other")
-
-        if status == 2:
-
-
-            # wi = np.array([v.x for v in growth.getVars()])#growth.solution.get_values()
-            val = growth.objVal
-
-            if len(secondobj) != len(sparms):#if not given a valid second objective, minimize total flux
-                secondobj = -np.ones(len(sparms))
-
-
-            growth.addConstr(objv == val)
-            growth.update()
-            newobj = gb.quicksum([a[0]*a[1] for a in zip(secondobj,sparms)])
-            growth.setObjective(newobj,gb.GRB.MAXIMIZE)
-            growth.update()
-            growth.optimize()
-
-            wi = np.array([v.x for v in growth.getVars()])
-
-
-
-            static2 = np.concatenate([-low_exch,up_int,-low_int])
-            if report_activity:
-                minuts,sec = divmod(time.time() - t1, 60)
-                try:
-                    flobj.write("prep_indv_model: Done in " + str(int(minuts)) + " minutes, " + str(sec) + " seconds.\n")
-                except:
-                    print("prep_indv_model: Done in ",int(minuts)," minutes, ",sec," seconds.")
-
-
-            return wi,(MatrixA,static2,alphas,Gamma1,Gamma2,obje,death)
-        else:
-            return "failed to prep"
-
-    elif solver == 'cp':
-#
-        MatrixA = np.concatenate([Gamma1,-Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0).astype(float)
-        Gamma2 = Gamma2.astype(float)
-        upbds_exch = initial_N*alphas
-
-        if report_activity:
-            try:
-                flobj.write("prep_indv_model: initializing LP\n")
-            except:
-                print("prep_indv_model: initializing LP")
-
-
-
-
-        growth = cp.Cplex()
-
-
-        sparms = ["s" + str(i) for i in range(MatrixA.shape[1])]
-        s_lbs = [-cp.infinity]*MatrixA.shape[1]
-        s_ubs = [cp.infinity]*MatrixA.shape[1]
-
-        growth.variables.add(obj = obje, lb = s_lbs, ub = s_ubs, names = sparms)
-        growth.objective.set_sense(growth.objective.sense.maximize)
-
-        growth.set_results_stream(None)
-        growth.set_warning_stream(None)
-
-        if report_activity:
-            try:
-                flobj.write("prep_indv_model: Adding constraints\n")
-            except:
-                print("prep_indv_model: Adding constraints")
-
-        bdtypes = np.array(['L']*len(MatrixA) + ['E']*len(Gamma2))
-        bds_vec = np.concatenate([upbds_exch,-low_exch,up_int,-low_int,np.zeros(len(Gamma2))])
-
-
-        g1p2 = [list(g) for g in MatrixA] + [list(g) for g in Gamma2]
-        g1p2_wi = [[sparms, g] for g in g1p2]
-        growth.linear_constraints.add(lin_expr = g1p2_wi, senses = bdtypes,  rhs = bds_vec)
-        if report_activity:
-            try:
-                flobj.write("prep_indv_model: optimizing LP\n")
-            except:
-                print("prep_indv_model: optimizing LP")
-        growth.solve()
-
-        status = growth.solution.get_status()
-        statusdic = {1:"OPTIMAL",3:"INFEASIBLE",4:"INF_OR_UNBD",2:"UNBOUNDED"}
-
-
-        if status in statusdic.keys():
-            if report_activity:
-                try:
-                    flobj.write("find_waves: LP Status: " +  statusdic[status] + '\n')
-                except:
-                    print("find_waves: LP Status: ", statusdic[status])
-        else:
-            if report_activity:
-                try:
-                    flobj.write("find_waves: LP Status: Other\n")
-                except:
-                    print("find_waves: LP Status: Other")
-
-
-
-        if status == 1:
-
-            # wi = np.array([growth.solution.get_values("s"+str(i)) for i in range(MatrixA.shape[1])])
-            # wi2 = np.array(growth.solution.get_values()) This should be the same but you never freaking know.
-
-            val = growth.solution.get_objective_value()
-
-            if len(secondobj) != len(sparms):#if not given a valid second objective, minimize total flux
-                secondobj = -np.ones(len(sparms)).astype(float)
-            else:
-                secondobj = np.array(secondobj).astype(float)
-
-            new_const = [sparms,list(obje)]
-            growth.linear_constraints.add(lin_expr = [new_const], senses = ['E'], rhs = [val])
-            newobj = [(sparms[i],secondobj[i]) for i in range(len(sparms))]
-            growth.objective.set_linear(newobj)
-            growth.solve()
-
-            wi = np.array([growth.solution.get_values("s"+str(i)) for i in range(MatrixA.shape[1])])
-
-
-
-
-            static2 = np.concatenate([-low_exch,up_int,-low_int])
-            if report_activity:
-                minuts,sec = divmod(time.time() - t1, 60)
-                try:
-                    flobj.write("prep_indv_model: Done in " + str(int(minuts)) + " minutes " + str(sec) + " seconds.\n")
-                except:
-                    print("prep_indv_model: Done in ",int(minuts)," minutes, ",sec," seconds.")
-            return wi,(MatrixA,static2,alphas,Gamma1,Gamma2,obje,death)
-
-
-        else:
-            return "failed to prep"
-
-
-    else:
-        print("Please select solver Gurobi: 'gb' or CPlex: 'cp'")
-        return None
 
 
 def unpack_model(y,num_orgs,num_mets):
@@ -427,11 +462,7 @@ def pack_model(x,N):
 
 
 
-
-
-
-
-def find_waves(y,v,bddts,params,headsup = [], model = None,report_activity = True, solver = 'gb',flobj = None):
+def find_waves(y,v,bddts,surfmodel,headsup = [], model = None,report_activity = True, solver = 'gb',flobj = None):
     '''
     bddts must be 0 (for internal bound) or kappa_j ydot_j
 
@@ -451,7 +482,13 @@ def find_waves(y,v,bddts,params,headsup = [], model = None,report_activity = Tru
     t = time.time()
     precision = 8
     minprecision = 0
-    MatA, statbds, kappas, Gamma1,Gamma2,obje,death = params
+    MatA = surfmodel.MatrixA
+    statbds = surfmodel.statbds
+    kappas = surfmodel.uptakes
+    Gamma1 = surfmodel.Gamma1
+    Gamma2 = surfmodel.Gamma2
+    obje = surfmodel.objective
+    death = surfmodel.deathrate
     ###Determine which constraints we are at
     bds = np.concatenate([y*kappas,statbds])
 
@@ -934,7 +971,8 @@ def find_waves(y,v,bddts,params,headsup = [], model = None,report_activity = Tru
     return QB,RB,the_index_of_basis, findbasis
 
 
-def compute_v(y,kappa,internal,G2len,Q,R,basisindex):
+def compute_v(y,kappa,internal,G2len,basis):#Q,R,basisindex):
+    Q,R,basisindex = basis
     ybds = kappa*y
 
     lbds_ex_min = np.minimum(ybds,-internal[:len(y)])
@@ -954,7 +992,7 @@ def compute_v(y,kappa,internal,G2len,Q,R,basisindex):
 
 
 
-def evolve_sys2(t,y,params):##Computes xdot for an organism, and that organism's contribution to ydot
+def evolve_sys2(t,y,surfmod):##Computes xdot for an organism, and that organism's contribution to ydot
     '''
     MatA is
     [Gamma1 ]
@@ -969,10 +1007,10 @@ def evolve_sys2(t,y,params):##Computes xdot for an organism, and that organism's
     '''
     # _,_,alphas,Gamma1,_,lilg,death,_,_,_ = params
 
-    alphas = params[2]
-    Gamma1 = params[3]
-    lilg = params[5]
-    death = params[6]
+    alphas = surfmod.uptakes#params[2]
+    Gamma1 = surfmod.Gamma1#params[3]
+    lilg = surfmod.objective#params[5]
+    death = surfmod.deathrate#params[6]
 
 
     #Unpack state vector
@@ -991,24 +1029,29 @@ def evolve_comm(t,y,all_params):
         dx/dt, dy/dt, dv/dt
     '''
 
-    paramslist,num_mets,v_sizes,metab_infl,metab_dil,mlim1 = all_params
+    model_list,bases,num_mets,v_sizes,metab_infl,metab_dil = all_params
     num_orgs = len(v_sizes)
     ###State vector is given as [x1,...,xn,y1,...,ym,v11,...,v1l,v21,...,v2o,...,vnp]
     unpk = unpack_model(y,num_orgs,num_mets)
     x = unpk[0]
     N = unpk[1]
-    v = [compute_v(N,pl[2],pl[1],len(pl[4]),pl[7],pl[8],pl[9]) for pl in paramslist]
+
+
+    v = [compute_v(N,model_list[i].uptakes,model_list[i].statbds,len(model_list[i].Gamma2),bases[i]) for i in range(len(model_list))]
+
+
+
     xds = []
     Nds = np.zeros(len(N))
     for i in range(num_orgs):
-        yds = evolve_sys2(t,np.concatenate([[x[i]],N,v[i]]),paramslist[i])
+        yds = evolve_sys2(t,np.concatenate([[x[i]],N,v[i]]),model_list[i])
         xds += list(yds[0])
         Nds = Nds + yds[1]
     Nds = Nds + metab_infl - metab_dil*N
 
     return np.concatenate([xds,Nds])
 
-def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'both',enoughalready = 10,flobj = None):
+def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'both',enoughalready = 10,flobj = None):
     '''
     Dynamic Flux Balance Analysis for a community of organims.
 
@@ -1074,8 +1117,18 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
 
     np.set_printoptions(linewidth = 200)
 
-    if len(model_names) != len(x0):
-        model_names = ['x' + str(i) for i in range(len(x0))]
+    if isinstance(model_list,dict):
+        model_names = [mod.Name for mod in model_list.values()]#establish an order for the models
+        model_list0 = [model_list[nm] for nm in model_names]#
+        model_list = model_list0
+        model_list0 = 0
+    else:
+        model_names = [mod.Name for mod in model_list]#or just get the names.
+
+
+
+    # if len(model_names) != len(x0):
+    #     model_names = ['x' + str(i) for i in range(len(x0))]
     if len(metabolite_names) != len(y0):
         metabolite_names = ['y' + str(i) for i in range(len(y0))]
 
@@ -1110,22 +1163,24 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
         y0 = yy0
         yy0 = 0
 
-    if isinstance(death,dict):
-        dth = np.zeros(len(x0))
-        for nm in death.keys():
-            dth[np.where(np.array(model_names) == nm)] = death[nm]
-        death = dth
-        dth = 0
+
+
+
+    # if isinstance(death,dict):
+    #     dth = np.zeros(len(x0))
+    #     for nm in death.keys():
+    #         dth[np.where(np.array(model_names) == nm)] = death[nm]
+    #     death = dth
+    #     dth = 0
 
     #The models can be passed in a dict!
-    if isinstance(model_list,dict):
-        model_list0 = [model_list[nm] for nm in model_names]#
-        model_list = model_list0
-        model_list0 = 0
+
+
+
 
     x0 = np.array(x0)
     y0 = np.array(y0)
-    death = np.array(death)
+    death = np.array([mod.deathrate for mod in model_list])
     met_in = np.array(met_in)
     met_out = np.array(met_out)
 
@@ -1137,8 +1192,8 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
         except:
             print('Surfin_FBA: Initializing with models\n',model_names)
 
-    lbds_li = [modl[-1].astype(float) for modl in model_list]
-    lbds_m_li = [np.minimum(modl[-1],modl[-2]*y0) for modl in model_list]
+    lbds_li = [modl.exchgLB.astype(float) for modl in model_list]
+    lbds_m_li = [np.minimum(modl.exchgLB,modl.uptakes*y0) for modl in model_list]
 
     static2_nox = []
 
@@ -1155,12 +1210,13 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
     numjobs = min(len(model_list),cpu_count())
 
     if concurrent:
-        preps = dict(Parallel(n_jobs=numjobs)(delayed(lambda i: (i,prep_indv_model(*model_list[i],y0,death[i],report_activity = 0,solver = solver1,flobj = None)))(i) for i in range(len(model_list))))
+        preps = dict(Parallel(n_jobs=numjobs)(delayed(lambda i: (i,model_list[i].prep_indv_model(y0,report_activity = 0,solver = solver1,flobj = None)))(i) for i in range(len(model_list))))#preps contains the initial internal fluxes
     else:
-        preps = dict([(i,prep_indv_model(*model_list[i],y0,death[i],report_activity = 1,solver = solver1,flobj = flobj)) for i in range(len(model_list))])
+        preps = dict([(i,model_list[i].prep_indv_model(y0,report_activity = 1,solver = solver1,flobj = flobj)) for i in range(len(model_list))])
 
 
-    if "failed to prep" in preps.values():
+
+    if "failed to prep" in [list(pva) for pva in preps.values()]:
         if report_activity:
             t2 = time.time() - t1
             minuts,sec = divmod(t2,60)
@@ -1171,31 +1227,31 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
         return None,None,None,None,None
 
 
-    yd0 = sum([-x0[i]*np.dot(preps[i][1][3],preps[i][0]) for i in range(len(model_list))])
-    paramlist1 = [preps[i][1] for i in range(len(model_list))]
-    initial_vs = [preps[i][0] for i in range(len(model_list))]
+    yd0 = sum([-x0[i]*np.dot(model_list[i].Gamma1,preps[i]) for i in range(len(model_list))])
+    # paramlist1 = [preps[i][1] for i in range(len(model_list))] #
+    initial_vs = [preps[i] for i in range(len(model_list))]
 
-    static2_nox = [np.concatenate([-modl[6],modl[4],-modl[3]]) for modl in model_list]
+    static2_nox = [np.concatenate([-modl.exchgLB,modl.intUB,-modl.intLB]) for modl in model_list]
 
 
     preptime = preptime + (time.time()-t_re)
 
     yd0 = yd0 + met_in - y0*met_out
-    paramlist2 = []
+    bases = []
     gb_modellist = []
 
     upperatlower = []
-    for i in range(len(paramlist1)):
+    for i in range(len(model_list)):
 
 
         t_re = time.time()
 
-        lbds_ex = lbds_li[i]
-        lbds_ex_min = lbds_m_li[i]
+        lbds_ex = model_list[i].exchgLB.astype(float)#lbds_li[i]
+        lbds_ex_min = np.minimum(model_list[i].exchgLB,model_list[i].uptakes*y0)#lbds_m_li[i]
 
 
-        exup_mov= paramlist1[i][2]*yd0
-        stati = np.zeros(len(paramlist1[i][0])-len(yd0))
+        exup_mov= model_list[i].uptakes*yd0
+        stati = np.zeros(len(model_list[i].MatrixA)-len(yd0))
 
 
 
@@ -1214,27 +1270,18 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
             except:
                 print('Surfin_FBA: finding basis for ',model_names[i])
 
-        fwreturn = find_waves(y0,initial_vs[i],bddts0,paramlist1[i],report_activity = detail_activity,solver = solver2,flobj = flobj)
+        fwreturn = find_waves(y0,initial_vs[i],bddts0,model_list[i],report_activity = detail_activity,solver = solver2,flobj = flobj)
 
-
-        if fwreturn != 'BAD LP':
+        if ((fwreturn != 'BAD LP') and (fwreturn !='infeasible')):
             gb_modellist += [fwreturn[-1]]
             wavs = fwreturn[:-1]
-            paramlist2 +=  [list(paramlist1[i]) + list(wavs)]
+            bases +=  [list(wavs)]
         else:
             break
 
         preptime = preptime + (time.time()-t_re)
 
-    if report_activity:
-        t2 = time.time() - t1
-        minuts,sec = divmod(t2,60)
-        try:
-            flobj.write("Surfin_FBA: Models prepped and initial basis found in " + str(minuts) + " minutes, " + str(sec) + " seconds.\n")
-        except:
-            print("Surfin_FBA: Models prepped and initial basis found in ",minuts," minutes, ",sec," seconds.")
-
-    if fwreturn == 'BAD LP':
+    if ((fwreturn == 'BAD LP') or (fwreturn == 'infeasible')):
         if report_activity:
             t2 = time.time() - t1
             minuts,sec = divmod(t2,60)
@@ -1244,11 +1291,20 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
                 print("Surfin_FBA: Failed  in ",int(minuts)," minutes, ",sec," seconds.")
         return None,None,None,None,None
 
+    if report_activity:
+        t2 = time.time() - t1
+        minuts,sec = divmod(t2,60)
+        try:
+            flobj.write("Surfin_FBA: Models prepped and initial basis found in " + str(minuts) + " minutes, " + str(sec) + " seconds.\n")
+        except:
+            print("Surfin_FBA: Models prepped and initial basis found in ",minuts," minutes, ",sec," seconds.")
+
+
 
 
     v_sizes = np.array([len(vv) for vv in initial_vs])
 
-    parameters = [paramlist2,len(y0),v_sizes,met_in,met_out,[ml[-1] for ml in model_list]]
+    parameters = [model_list,bases,len(y0),v_sizes,met_in,met_out]
 
     ics = pack_model(x0,y0)
 
@@ -1266,12 +1322,12 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
     v = [initial_vs]### List of list of arrays of vs. So v[i][j][k] is v[k] for organism x[j] and time t[i]
     t = [0]
 
-    ydparts = [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),paramlist2[i])[1] for i in range(len(model_list))]]### List of list of arrays of vs. So ydpart[i][j][k] is organism x[j]'s contribution to ydot[k] at time t[i]
+    ydparts = [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),model_list[i])[1] for i in range(len(model_list))]]### List of list of arrays of vs. So ydpart[i][j][k] is organism x[j]'s contribution to ydot[k] at time t[i]
 
     # tn = 0
     ok = [True]
 
-    brokeit = [(np.array([]).astype(int),) for pl in paramlist1]
+    brokeit = [(np.array([]).astype(int),) for pl in model_list]
 
 
     notmoving = False
@@ -1290,29 +1346,29 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
 
         x_t = unpacked[0]
         y_t = unpacked[1]
-        v_t = [compute_v(unpacked[1],paramlist2[i][2],static2_nox[i],len(paramlist2[i][4]),paramlist2[i][7],paramlist2[i][8],paramlist2[i][9]) for i in range(len(paramlist2))]
+        v_t = [compute_v(unpacked[1],model_list[i].uptakes,model_list[i].statbds,len(model_list[i].Gamma2),bases[i]) for i in range(len(model_list))]
 
 
 ###################################### Make sure the solution is still feasible
-        ok = np.empty(len(paramlist1), dtype = bool)
+        ok = np.empty(len(model_list), dtype = bool)
         breakers = []
         upperatlower_new = []
-        for j in range(len(paramlist1)):
+        for j in range(len(model_list)):
 
 
 
             #Here, we can handle lower bounds greater than 0 by having them match the upper bounds. However, that means
             # they aren't changing smoothly, which isn't good.
-            lbds_ex = model_list[j][-1]
-            lbds_ex_min = np.minimum(lbds_ex,paramlist1[j][2]*y_t)
+            lbds_ex = model_list[j].exchgLB
+            lbds_ex_min = np.minimum(lbds_ex,model_list[j].uptakes*y_t)
             upperatlower_new += [np.where(lbds_ex > lbds_ex_min)]
             no_longer = [num for num in upperatlower[j][0] if num not in upperatlower_new[j][0]]
-            paramlist1[j][1][upperatlower_new[j]] = -(paramlist1[j][2]*y_t)[upperatlower_new[j]]
-            paramlist1[j][1][(no_longer,)] = -lbds_ex[(no_longer,)]
+            model_list[j].statbds[upperatlower_new[j]] = -(model_list[j].uptakes*y_t)[upperatlower_new[j]]
+            model_list[j].statbds[(no_longer,)] = -lbds_ex[(no_longer,)]
 
-            breakers += [np.dot(paramlist1[j][0],v_t[j]).round(chk_round) <= np.concatenate([paramlist1[j][2]*y_t,paramlist1[j][1]]).round(chk_round)]
+            breakers += [np.dot(model_list[j].MatrixA,v_t[j]).round(chk_round) <= np.concatenate([model_list[j].uptakes*y_t,model_list[j].statbds]).round(chk_round)]
 
-            ok[j] = np.all(breakers[j]) and np.all(np.dot(paramlist1[j][4],v_t[j]).round(chk_round) ==0)
+            ok[j] = np.all(breakers[j]) and np.all(np.dot(model_list[j].Gamma2,v_t[j]).round(chk_round) ==0)
 
         check = all(ok)
 
@@ -1323,7 +1379,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
             y += [y_t]
             v += [v_t]
             t += [dfba.t]
-            ydparts += [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),paramlist2[i])[1] for i in range(len(model_list))]]
+            ydparts += [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),model_list[i])[1] for i in range(len(model_list))]]
             notmoving = False
             if resolution < initres:
                 resolution = resolution*5
@@ -1365,8 +1421,8 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
             #### Need to Re-Kajigger with previous timepoint
             yd0 = np.zeros(len(y0))
             for j in range(len(model_list)):
-                ### Gamma^star_j is paramlist1[j][3]
-                yd0 += -x[-1][j]*np.dot(paramlist1[j][3],v[-1][j])
+                ### Gamma^star_j is model_list[j].Gamma1
+                yd0 += -x[-1][j]*np.dot(model_list[j].Gamma1,v[-1][j])
             yd0 = yd0 + met_in - met_out*y[-1]
 
 
@@ -1374,12 +1430,12 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
 
             ###The actual basis finding step for each microbe:
 
-            for j in range(len(paramlist1)):
+            for j in range(len(model_list)):
 
                 if not ok[j]:
 
-                    exup_mov= paramlist1[j][2]*yd0
-                    stati = np.zeros(len(paramlist1[j][0])-len(yd0))
+                    exup_mov= model_list[j].uptakes*yd0
+                    stati = np.zeros(len(model_list[j].MatrixA)-len(yd0))
 
 
                     stati[upperatlower[j]] = -exup_mov[upperatlower[j]]
@@ -1392,7 +1448,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
                     brokeit[j] = np.where(np.invert(breakers[j]))
 
 
-                    fwreturn = find_waves(y[-1],v[-1][j],bddts0,paramlist1[j],headsup = brokeit[j][0], model = gb_modellist[j],report_activity = detail_activity,solver = solver2,flobj = flobj)
+                    fwreturn = find_waves(y[-1],v[-1][j],bddts0,model_list[j],headsup = brokeit[j][0], model = gb_modellist[j],report_activity = detail_activity,solver = solver2,flobj = flobj)
 
 
 
@@ -1402,7 +1458,7 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
                     elif fwreturn != 'BAD LP':
                         wavs = fwreturn[:-1]
                         gb_modellist[j] = fwreturn[-1]
-                        paramlist2[j] =  list(paramlist1[j]) + list(wavs)
+                        bases[j] =  list(wavs)
 
 
                     else:
@@ -1426,7 +1482,12 @@ def Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],me
 
 
 
-            parameters = [paramlist2,len(y0),v_sizes,met_in,met_out,[ml[-1] for ml in model_list]]
+            parameters = [model_list,bases,len(y0),v_sizes,met_in,met_out]#[paramlist2,len(y0),v_sizes,met_in,met_out,[ml[-1] for ml in model_list]]
+
+            ############################################################################################################
+            ############################################################################################################
+            ############################################################################################################
+
 
             ics = pack_model(x[-1],y[-1])
             dfba = ode(evolve_comm)
