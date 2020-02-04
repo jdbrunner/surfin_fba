@@ -21,4 +21,4 @@ from surfin_fba.Surfin_FBA import *
 
 
 def version():
-    return "Surfin_FBA version 0.6 1/22/2020"
+    return "Surfin_FBA version 0.7 2/1/2020"

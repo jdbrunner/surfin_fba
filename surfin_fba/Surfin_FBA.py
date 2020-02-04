@@ -34,7 +34,7 @@ class SurfMod:
         else:
             self.Name = Name
         self.MatrixA =  np.concatenate([G1,-G1,np.eye(G1.shape[1]),-np.eye(G1.shape[1])],axis = 0)
-        self.statbds = np.empty(0)
+        self.statbds = np.concatenate([-elbs,iubs,-ilbs])#np.empty(0)
         self.deathrate = deathrate
 
     def prep_indv_model(self,initial_N,secondobj = [],report_activity = True, solver = 'gb',flobj = None):
@@ -140,7 +140,7 @@ class SurfMod:
 
 
 
-                static2 = np.concatenate([-low_exch,up_int,-low_int])
+                # static2 = np.concatenate([-low_exch,up_int,-low_int])
                 if report_activity:
                     minuts,sec = divmod(time.time() - t1, 60)
                     try:
@@ -149,7 +149,7 @@ class SurfMod:
                         print("prep_indv_model: Done in ",int(minuts)," minutes, ",sec," seconds.")
 
 
-                self.statbds = static2
+                # self.statbds = static2
                 return wi#,(MatrixA,static2,alphas,Gamma1,Gamma2,obje,death)
             else:
                 return "failed to prep"
@@ -244,7 +244,7 @@ class SurfMod:
 
 
 
-                static2 = np.concatenate([-low_exch,up_int,-low_int])
+                # static2 = np.concatenate([-low_exch,up_int,-low_int])
                 if report_activity:
                     minuts,sec = divmod(time.time() - t1, 60)
                     try:
@@ -252,7 +252,7 @@ class SurfMod:
                     except:
                         print("prep_indv_model: Done in ",int(minuts)," minutes, ",sec," seconds.")
 
-                self.statbds
+                # self.statbds
                 return wi#,(MatrixA,static2,alphas,Gamma1,Gamma2,obje,death)
 
 
@@ -441,7 +441,7 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = 
 
         kappas = np.array([urts[model.name][nm] if nm in urts[model.name].keys() else 0 for nm in masterlist])
 
-        real_model[modelkey] = SurfMod(Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds,model.name)
+        real_model[modelkey] = SurfMod(Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds,Name = model.name)
         #[Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds]
         # namemap[modelkey] = model.name
 
@@ -1119,11 +1119,15 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
 
     if isinstance(model_list,dict):
         model_names = [mod.Name for mod in model_list.values()]#establish an order for the models
-        model_list0 = [model_list[nm] for nm in model_names]#
+        model_keys = dict([(ky,mod.Name) for ky,mod in model_list.items()])
+        model_keys_inverse = dict([(mod.Name,ky) for ky,mod in model_list.items()])
+
+        model_list0 = [model_list[model_keys_inverse[nm]] for nm in model_names]#
         model_list = model_list0
         model_list0 = 0
     else:
         model_names = [mod.Name for mod in model_list]#or just get the names.
+        model_keys = dict([(mod,mod) for mod in model_names])
 
 
 
@@ -1152,7 +1156,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     if isinstance(x0,dict):
         xx0 = np.zeros(len(x0))
         for nm in x0.keys():
-            xx0[np.where(np.array(model_names) == nm)] = x0[nm]
+            xx0[np.where(np.array(model_names) == model_keys[nm])] = x0[nm]
         x0 = xx0
         xx0 = 0
 
