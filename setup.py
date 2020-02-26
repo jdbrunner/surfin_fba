@@ -15,8 +15,8 @@ except:
     None
 
 setuptools.setup(
-    name="surfin_fba",
-    version="0.6",
+    name="surfinFBA",
+    version="0.8.6",
     author="James D. Brunner, Ph.D.",
     author_email="brunner.james@mayo.edu",
     description="Dynamic FBA for use with COBRApy metabolic models",
@@ -30,5 +30,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    install_requres=['numpy','scipy.integrate','pandas','time','joblib','cobra']
+    install_requres=['numpy','scipy.integrate','pandas','joblib','cobra','matplotlib'],
+    include_package_data=True
 )

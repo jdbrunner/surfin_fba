@@ -1,7 +1,7 @@
 
 
 
-
+import sys
 nosolver = 0
 try:
     import cplex as cp
@@ -17,8 +17,8 @@ if nosolver == 2:
     print("Surfin_FBA requires either CPLEX or GUROBI with associated python modules installed.")
     sys.exit()
 
-from surfin_fba.Surfin_FBA import *
+from surfinFBA.Surfin_FBA import *
 
 
 def version():
-    return "Surfin_FBA version 0.7 2/1/2020"
+    return "Surfin_FBA version 0.8 2/26/2020"

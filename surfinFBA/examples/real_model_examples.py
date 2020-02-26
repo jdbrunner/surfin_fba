@@ -6,9 +6,9 @@ import cobra as cb
 # import json
 import pandas as pd
 import sys
-sys.path.append("../../surfin_fba")
+# sys.path.append("../../surfin_fba")
 # import Surfin_FBA as surf
-from Surfin_FBA import *
+import surfinFBA as surf
 
 
 import copy
@@ -42,4 +42,4 @@ desired_models = ["Ea"]#['Ea','Pa','Pch']#,'Pf','Pci','Pv','Pp','Sm']#['Pv','Pp'
 # call_me.send(phone)
 
 
-Tup = sim_cobraPY_comm(desired_models, model_file_dict)
+Tup = surf.sim_cobraPY_comm(desired_models, model_file_dict)
