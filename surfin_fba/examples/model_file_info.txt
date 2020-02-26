@@ -1,0 +1,13 @@
+Species,ID,File
+Ea,548.154,sample_models/548.154.json
+Pa,587753.25,sample_models/587753.25.json
+Pch,587753.10,sample_models/587753.10.json
+Pci,53408.6,sample_models/53408.6.json
+Pf,1221522.3,sample_models/1221522.3.json
+Pp,351746.6,sample_models/351746.6.json
+Pv,76761.16,sample_models/76761.16.json
+Sm,615.102,sample_models/615.102.json
+Cr,iRC1080,sample_models/iRC1080.json
+Sc,iND750,sample_models/iND750.json
+
+

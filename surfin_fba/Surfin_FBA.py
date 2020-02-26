@@ -22,19 +22,19 @@ from joblib import Parallel, delayed, cpu_count
 
 class SurfMod:
     def __init__(self,G1,G2,lilg,ilbs,iubs,kaps,elbs,Name = None,deathrate = 0):
-        self.Gamma1 = G1
-        self.Gamma2 = G2
-        self.objective = lilg
-        self.intLB = ilbs
-        self.intUB = iubs
-        self.uptakes = kaps
-        self.exchgLB = elbs
+        self.Gamma1 = np.array(G1)
+        self.Gamma2 = np.array(G2)
+        self.objective = np.array(lilg)
+        self.intLB = np.array(ilbs)
+        self.intUB = np.array(iubs)
+        self.uptakes = np.array(kaps)
+        self.exchgLB = np.array(elbs)
         if Name == None:
             self.Name = ''.join([str(np.random.choice(list('abcdefg123456789'))) for n in range(5)])
         else:
             self.Name = Name
-        self.MatrixA =  np.concatenate([G1,-G1,np.eye(G1.shape[1]),-np.eye(G1.shape[1])],axis = 0)
-        self.statbds = np.concatenate([-elbs,iubs,-ilbs])#np.empty(0)
+        self.MatrixA =  np.concatenate([np.array(G1),-np.array(G1),np.eye(np.array(G1).shape[1]),-np.eye(np.array(G1).shape[1])],axis = 0)
+        self.statbds = np.concatenate([-np.array(elbs),np.array(iubs),-np.array(ilbs)])#np.empty(0)
         self.deathrate = deathrate
 
     def prep_indv_model(self,initial_N,secondobj = [],report_activity = True, solver = 'gb',flobj = None):
@@ -275,7 +275,7 @@ def get_expr_coos(expr, var_indices):
 
 
 
-def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = []):
+def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas = "new"):
 
     #can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolite1:val,metabolite2:val}}
 
@@ -294,9 +294,16 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = 
     nametorxnid = {}
     urts = {}
     if len(uptake_dicts) == 0:
-        if len(random_nums) == 0:
-            random_nums = np.load('random_stream.npy')
-
+        try:
+            random_nums = np.load(random_kappas)
+            loadedrand = True
+        except:
+            random_nums = np.empty(0)
+            loadedrand = False
+            if random_kappas == "ones":
+                print("Will use uniform uptake parameters = 1")
+            else:
+                print("Will create random uptake")
         rand_str_loc = 0
 
     for modelkey in models.keys():
@@ -311,12 +318,28 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_nums = 
             exchng_reactions += [rxn.id for rxn in model.metabolites.get_by_id(met).reactions if 'EX_' in rxn.id]
         nutrient_concentrations = {}
         if len(uptake_dicts) ==0:
-            if rand_str_loc < len(random_nums):
-                uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
-                rand_str_loc = rand_str_loc + len(exchng_reactions)
-                uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+            if loadedrand:
+                if rand_str_loc < len(random_nums):
+                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    rand_str_loc = rand_str_loc + len(exchng_reactions)
+                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+                else:
+                    random_nums = np.concatenate([random_nums,np.random.rand(len(exchng_reactions))])
+                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    rand_str_loc = rand_str_loc + len(exchng_reactions)
+                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
             else:
-                print("prep_cobrapy_models:Need more random numbers.")
+                if random_kappas == "ones":
+                    random_nums = np.concatenate([random_nums,np.ones(len(exchng_reactions))])
+                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    rand_str_loc = rand_str_loc + len(exchng_reactions)
+                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+                else:
+                    random_nums = np.concatenate([random_nums,np.random.rand(len(exchng_reactions))])
+                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    rand_str_loc = rand_str_loc + len(exchng_reactions)
+                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+
         else:
             uptkdict = uptake_dicts[modelkey]
             uptake_rate = [uptkdict[met] for met in exchng_metabolite_names]
@@ -1053,19 +1076,28 @@ def evolve_comm(t,y,all_params):
 
 def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'both',enoughalready = 10,flobj = None):
     '''
-    Dynamic Flux Balance Analysis for a community of organims.
+        Surfin_FBA parameters:
+        * model_list (positional) - list or dictionary of SurfMod objects (as returned by prep_cobrapy_models)
+        * x0 (positional) - list or dictionary: initial microbial biomass (keys should be mod.Name for each model in model_list)
+        * y0 (positional) - list or dictionary: initial metabolite biomass
+        * met_in (positional) - list or dict: metabolite inflow rates
+        * met_out (positional) - list or dict: metabolite outflow rates
+        * endtime (positional) - int: simulation length
+        * metabolite_names (keyword) - list: metabolite names, which are keys for metabolite related dicts.
+        * report_activity (keyword) - Bool: whether or not to log all simulation steps
+        * detail_activity (keyword) - Bool: whether or not to log all simulation substeps, especially in basis finding
+        * initres (keyword) - float: initial time step resolution
+        * concurrent (keyword) - Bool: option to attempt to parallelize initialization
+        * solver (keyword) - string: LP solver to use, 'cp' to use CPLEX, 'gb' to use Gurobi, 'both' to use a combination (fastest option)
+        * enoughalready (keyword) - int: -log of minimum step size
+        * flobj (keyword) - file-like: file onto which to print all simulation output (excluding some error messages), if None will print to stdout
 
-    model_list: list of GEMs:
-    each model consists of [Gamma1,Gamma2,objective,internal lower bounds,internal upper bounds,exchange rate constants,exchange lower bounds]
-    x0, y0 are initial species biomass and metabolite biomass (can be dicts or listlike.)
-
-    death is list of dilution constants for species (can be dict or listlike, any not in dict are assumed 0)
-
-    met_in is list of metabolite inflow rates. (can be dict or listlike, any not in dict are assumed 0)
-
-    met_out is list of metabolite dilution constants (can be dict or listlike, any not in dict are assumed 0)
-
-    endtime - simulation is from t=0 to t=endtime.
+        Which returns the tuple (biomasses,metabolite_bioms,internal_flux,t,ydotconts):
+        * biomasses = dict - microbe biomasses at each time point, keys are mod.Name for given models
+        * metabolite_bioms = dict - metabolite biomasses at each time point, keys are metabolite names
+        * internal_flux = dict - internal fluxes for each model, keys are mod.Name for given models
+        * t = list - time points of simulation
+        * ydotconts = dict of dicts - usage of each metabolite by species. Keys are mod.Name, second level keys are metabolite names
 
     '''
 
@@ -1547,3 +1579,139 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
 
 
     return biomasses,metabolite_bioms,internal_flux,t,ydotconts
+
+
+def sim_cobraPY_comm(desired_models,model_info,x_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = ''):
+    '''
+    paramters:
+
+    * desired models = list - a list of keys for the models in the community to be simulated
+    * model_info = dict - dictionary of model .json file paths.
+    * x_init = dict - initial microbe biomasses, keyed by model keys. Any model not in dict will default to initial biomass 1
+    * death_rates = dict - death/dilution rates of microbes. Defaults to 0
+    * uptake_dicts = {} - dict of dicts keyed by model key (from cobra_models dict) and metabolite. If empty, random parameters are generated
+    * allinflow = float - default metabolite inflow rate
+    * alloutflow = float - detault metabolite outflow rate
+    * met_inflow = dict - pass a dict to change only certain metabolite inflows
+    * met_outflow = dict - pass a dict to change only certain metabolite outflows.
+    * save = bool - if true, will save simulation plots and trajectory. Trajectory is saved as a .json file (load to python dictionary) with keys "X" for microbe biomass, "Y" for metabolite biomass, "V" for internal fluxes, "U" for metabolite usage, and "T" for time.
+    * save_fl = name of save files. Appended with '_fig_'+ ''.join(desired_models) + ".png" and '_data_' + ''.join(desired_models)  + ".json"
+    * extracell = string - name of extracellular compartment in COBRAPy model
+    * random_kappas = string - If this is a file containing random numbers (and so repeatable for debugging) these will be loaded and used for the uptake values kij. If this is "ones" then all uptake parameters will be set to 1. Otherwise, random numbers will be generated.
+
+    returns the tuple (biomasses,metabolite_bioms,internal_flux,t,ydotconts):
+    * biomasses = dict - microbe biomasses at each time point, keys are mod.Name for given models
+    * metabolite_bioms = dict - metabolite biomasses at each time point, keys are metabolite names
+    * internal_flux = dict - internal fluxes for each model, keys are mod.Name for given models
+    * t = list - time points of simulation
+    * ydotconts = dict of dicts - usage of each metabolite by species. Keys are mod.Name, second level keys are metabolite names
+    '''
+
+
+
+    cobra_models = {}
+
+    for mod in desired_models:
+        if mod in model_info.keys():
+            flnm = model_info[mod]
+            cobra_models[mod] = cb.io.load_json_model(flnm)
+            if not cobra_models[mod].name:
+                cobra_models[mod].name = mod
+        else:
+            print("Error: No model of species " + mod)
+
+
+    print("Loaded " + str(len(cobra_models)) + " models successfully")
+
+
+
+
+    my_models,metabolite_list,initial_metabolites = prep_cobrapy_models(cobra_models,uptake_dicts = uptake_dicts, extracell = extracell, random_kappas = random_kappas)
+
+    print("Prepped all models successfully")
+
+    x0 = dict(zip(desired_models,np.ones(len(desired_models))))
+    for mod in desired_models:
+        if mod in x_init.keys():
+            x0[mod] = x_init[mod]
+
+    for mod in desired_models:
+        if mod in death_rates.keys():
+            my_models[mod].deathrate = death_rates[mod]
+        else:
+            my_models[mod].deathrate = 0
+
+
+    met_in = dict([(ky,allinflow) for ky in metabolite_list])
+    for met in met_inflow.keys():
+        met_in[met] = met_inflow[met]
+
+
+    met_out = dict([(ky,alloutflow) for ky in metabolite_list])
+    for met in met_outflow.keys():
+        met_out[met] = met_outflow[met]
+
+
+    print("Running simulation")
+    ###USAGE: Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,model_names = [],metabolite_names = [],ptimes = True, report_activity = True, detail_activity = True, initres = 0.001,enoughalready = 10)
+    with open("real_model_log.txt",'w') as logfl:
+        x,y,v,t,usage = Surfin_FBA(my_models,x0,initial_metabolites,met_in,met_out,endt,metabolite_names = metabolite_list,concurrent = False,solver = 'both', flobj = logfl,report_activity = True, detail_activity = True)
+    print("Simulation complete")
+
+
+    print("Making Plots")
+    fig,ax = plt.subplots(2,1,figsize = (10,10),tight_layout = True)
+    ax[0].set_prop_cycle(cycler(color = ['green', 'red','blue']))
+
+
+    labels1 = []
+    labels2 = []
+
+
+    for nm,tc in x.items():
+        ax[0].plot(t,tc)
+        labels1 +=[nm]
+    ax[0].legend(labels1,prop={'size': 14})
+    for nm,tc in y.items():
+        ax[1].plot(t,tc)
+        labels2 +=[nm]
+    # ax[1].legend(labels2,prop={'size': 20})
+    if save:
+        fig.savefig(save_fl +'_fig_'+ ''.join(desired_models))
+        fig.close()
+        xj = copy.deepcopy(x)
+        for xx in xj:
+            xj[xx] = list(xj[xx])
+
+        yj = copy.deepcopy(y)
+        for yy in yj:
+            yj[yy] = list(yj[yy])
+
+        vj = copy.deepcopy(v)
+        for vv in vj:
+            vj[vv] = list(vj[vv])
+            for i in range(len(vj[vv])):
+                vj[vv][i] = list(vj[vv][i])
+
+        usagej = copy.deepcopy(usage)
+        for uu in usagej:
+            # usagej[uu] = list(usagej[uu])
+            for i in usagej[uu]:
+                usagej[uu][i] = list(usagej[uu][i])
+
+        fullthing = {'X':xj, 'Y':yj, 'V':vj, 'U':usagej, 'T':list(t)}
+
+        with open(save_fl + '_data_' + ''.join(desired_models) + '.json','w') as handle:
+                json.dump(fullthing,handle)
+
+    else:
+        plt.show()
+
+
+
+
+
+    tottime = divmod(time.time()-start_time,60)
+    print("--- %s minutes, %s seconds ---" % tottime)
+
+    return x,y,v,t,usage

@@ -1,60 +1,103 @@
-Dynamic FBA for use with COBRApy metabolic models.
+Dynamic FBA for use with COBRAPy metabolic models.
 
-To use dFBA, first format the desired models using prep_cobrapy_models, which takes as input
-a COBRApy model and outputs a model in the format used by surfin_fba.
+To simulate a community of microbes given as .json CORBA models, you may use:
 
-prep_cobrapy_models(cobra_models: dictionary of models,, uptake_dicts = {}: dict of dicts, random_nums=random_numbers: list of saved random numbers (for debugging) for random uptake rates)#returns dict,list,dict
+sim_cobraPY_comm(desired_models,model_info)
 
-#can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolitename1:val,metabolitename2:val}}
+required (positional) paramters:
 
-next, run surfin_fba
+* desired models = list - a list of keys for the models in the community to be simulated
+* model_info = dict - dictionary of model .json file paths, given as strings.
 
-Example usage:
+keyword parameters:
+
+* x_init = dict - initial microbe biomasses, keyed by model keys. Any model not in dict will default to initial biomass 1
+* death_rates = dict - death/dilution rates of microbes. Defaults to 0
+* uptake_dicts = {} - dict of dicts keyed by model key (from cobra_models dict) and metabolite. If empty, random parameters are generated
+* allinflow = float - default metabolite inflow rate
+* alloutflow = float - detault metabolite outflow rate
+* met_inflow = dict - pass a dict to change only certain metabolite inflows
+* met_outflow = dict - pass a dict to change only certain metabolite outflows.
+* save = bool - if true, will save simulation plots and trajectory. Trajectory is saved as a .json file (load to python dictionary) with keys "X" for microbe biomass, "Y" for metabolite biomass, "V" for internal fluxes, "U" for metabolite usage, and "T" for time.
+* save_fl = name of save files. Appended with '_fig_'+ ''.join(desired_models) + ".png" and '_data_' + ''.join(desired_models)  + ".json"
+* extracell = string - name of extracellular compartment in COBRAPy model
+* random_kappas = string - If this is a file containing random numbers (and so repeatable for debugging) these will be loaded and used for the uptake values kij. If this is "ones" then all uptake parameters will be set to 1. Otherwise, random numbers will be generated.
+
+returns the tuple (biomasses,metabolite_bioms,internal_flux,t,ydotconts):
+* biomasses = dict - microbe biomasses at each time point, keys are mod.Name for given models
+* metabolite_bioms = dict - metabolite biomasses at each time point, keys are metabolite names
+* internal_flux = dict - internal fluxes for each model, keys are mod.Name for given models
+* t = list - time points of simulation
+* ydotconts = dict of dicts - usage of each metabolite by species. Keys are mod.Name, second level keys are metabolite names
+'''
 
 
-my_models,metabolite_list,initial_metabolites,_ = surfin_fba.prep_cobrapy_models(cobra_models)
 
-xnsm = list(my_models.keys())
-modelllist= [my_models[n] for n in xnsm]
-x0 = dict(zip(xnsm,np.ones(len(xnsm))))
 
-death_rates = dict([(ky,0) for ky in xnsm])
-met_in = dict([(ky,0) for ky in metabolite_list])
-met_out = dict([(ky,0) for ky in metabolite_list])
+The main function is
 
-###USAGE: Surfin_FBA(model_list,x0,y0,death,met_in,met_out,endtime,model_names = [],metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'gb',enoughalready = 10,flobj = None)
-with open("real_model_log.txt",'w') as logfl:
-    x,y,v,t = surf.Surfin_FBA(modelllist,x0,initial_metabolites,death_rates,met_in,met_out,endt,model_names = xnsm,metabolite_names = metabolite_list,concurrent = False,solver = 'both', flobj = logfl,report_activity = True, detail_activity = True)
+Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'both',enoughalready = 10,flobj = None)
 
 Surfin_FBA parameters:
-model_list (positional) - list or dictionary of models as returned by prep_cobrapy_models
+* model_list (positional) - list or dictionary of SurfMod objects (as returned by prep_cobrapy_models)
+* x0 (positional) - list or dictionary: initial microbial biomass (keys should be mod.Name for each model in model_list)
+* y0 (positional) - list or dictionary: initial metabolite biomass
+* met_in (positional) - list or dict: metabolite inflow rates
+* met_out (positional) - list or dict: metabolite outflow rates
+* endtime (positional) - int: simulation length
+* metabolite_names (keyword) - list: metabolite names, which are keys for metabolite related dicts.
+* report_activity (keyword) - Bool: whether or not to log all simulation steps
+* detail_activity (keyword) - Bool: whether or not to log all simulation substeps, especially in basis finding
+* initres (keyword) - float: initial time step resolution
+* concurrent (keyword) - Bool: option to attempt to parallelize initialization
+* solver (keyword) - string: LP solver to use, 'cp' to use CPLEX, 'gb' to use Gurobi, 'both' to use a combination (fastest option)
+* enoughalready (keyword) - int: -log of minimum step size
+* flobj (keyword) - file-like: file onto which to print all simulation output (excluding some error messages), if None will print to stdout
 
-x0 (positional) - list or dictionary: initial microbial biomass
+Which returns the tuple (biomasses,metabolite_bioms,internal_flux,t,ydotconts):
+* biomasses = dict - microbe biomasses at each time point, keys are mod.Name for given models
+* metabolite_bioms = dict - metabolite biomasses at each time point, keys are metabolite names
+* internal_flux = dict - internal fluxes for each model, keys are mod.Name for given models
+* t = list - time points of simulation
+* ydotconts = dict of dicts - usage of each metabolite by species. Keys are mod.Name, second level keys are metabolite names
 
-y0 (positional) - list or dictionary: initial metabolite biomass
 
-death (positional) - list or dict: microbial dilution or death rates
+A Genome scale metabolic model can be written as a stoichiometric matrix S which can be partitioned
 
-met_in (positional) - list or dict: metabolite inflow rates
+[I G1]  
+[0 G2]
 
-met_out (positional) - list or dict: metabolite outflow rates
+Surfin_FBA defines the class SurfMod for simulation. This is a GEM of a single microbe re-formatted for dFBA simulation.
 
-endtime (positional) - int: simulation length
+Instance attributes required are:
+* Gamma1 = numpy array - part of stoichiometric matrix (G1)
+* Gamma2 = numpy array - part of stoichiometric matrix (G2)
+* objective = numpy array - growth objective for FBA
+* intLB = numpy array - lower bounds on internal flux vectors (ordered)
+* intUB = numpy array - upper bounds on internal flux vectors (ordered)
+* uptakes = numpy array - uptake efficiencies [k1,...,kn] upper bound of exchange reaction is kij*yj where yj is the metabolite exchanged with microbe xi (this model).
+* exchgLB = numpy array - lower bound of exchange reactions
+* Name = string - model name
+* deathrate = float - death or dilution rate of
 
-model_names (keyword) - list: model (microbe) names, which are keys for microbe related dicts. Establishes order
+The following attributes are created at initialization of an instance:
+* MatrixA =  np.concatenate([G1,-G1,np.eye(G1.shape[1]),-np.eye(G1.shape[1])],axis = 0)
+* statbds = np.concatenate([-elbs,iubs,-ilbs])#np.empty(0)
 
-metabolite_names (keyword) - list: metabolite names, which are keys for metabolite related dicts. Establishes order
+The method self.prep_indv_model(self,initial_N,secondobj = [],report_activity = True, solver = 'gb',flobj = None) further preps the model for use by Surfin_FBA. This is called by Surfin_FBA.
 
-report_activity (keyword) - Bool: whether or not to log all simulation steps
+To use dFBA with COBRAPy model, first format the desired models using prep_cobrapy_models, which takes as input
+a COBRApy model and outputs a model as a SurfMod object.
 
-detail_activity (keyword) - Bool: whether or not to log all simulation substeps, especially in basis finding
+prep_cobrapy_models(cobra_models, uptake_dicts = {}, extracell = 'e', random_kappas = "new")
 
-initres (keyword) - float: initial time step resolution
+parameters:
+* cobra_models = dict - dictionary of SurfMod objects
+* uptake_dicts = {} - dict of dicts keyed by model key (from cobra_models dict) and metabolite. If empty, random parameters are generated
+* extracell = string - name of extracellular compartment in COBRAPy model
+* random_kappas = string - If this is a file containing random numbers (and so repeatable for debugging) these will be loaded and used for the uptake values kij. If this is "ones" then all uptake parameters will be set to 1. Otherwise, random numbers will be generated.
 
-concurrent (keyword) - Bool: option to attempt to parallelize initialization
-
-solver (keyword) - string: LP solver to use, 'cp' to use CPLEX, 'gb' to use Gurobi, 'both' to use a combination (fastest option)
-
-enoughalready (keyword) - int: -log of minimum step size
-
-flobj (keyword) - file-like: file onto which to print all simulation output (excluding some error messages), if None will print to stdout
+returns:
+* dict of SurfMod objects
+* list of exchanged metabolites (in an "agreed upon" order)
+* dict of initial metabolite biomass
