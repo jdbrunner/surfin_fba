@@ -9,5 +9,5 @@ Pv,76761.16,sample_models/76761.16.json
 Sm,615.102,sample_models/615.102.json
 Cr,iRC1080,sample_models/iRC1080.json
 Sc,iND750,sample_models/iND750.json
-
+Ec,iJR904,sample_models/iJR904.json
 
