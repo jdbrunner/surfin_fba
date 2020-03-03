@@ -12,6 +12,7 @@ required (positional) paramters:
 keyword parameters:
 
 * x_init = dict - initial microbe biomasses, keyed by model keys. Any model not in dict will default to initial biomass 1
+* y_init = dict - By default, the model uses the model.medium dictionary (averaging in the case of communities) to determine initial external metabolite concentration. With this helper function, those files cannot be manipulated. However, we can pass a dictionary y_init = {metabolite:concentration} that includes any initial concentration that we wish to change
 * death_rates = dict - death/dilution rates of microbes. Defaults to 0
 * uptake_dicts = {} - dict of dicts keyed by model key (from cobra_models dict) and metabolite. If empty, random parameters are generated
 * allinflow = float - default metabolite inflow rate
