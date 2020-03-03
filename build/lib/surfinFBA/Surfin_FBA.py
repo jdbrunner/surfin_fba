@@ -15,7 +15,9 @@ from scipy.integrate import ode
 import pandas as pd
 import time
 from joblib import Parallel, delayed, cpu_count
-
+import cobra as cb
+import matplotlib.pyplot as plt
+from cycler import cycler
 
 
 # [Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds]
@@ -293,56 +295,70 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
     nametoid = {}
     nametorxnid = {}
     urts = {}
-    if len(uptake_dicts) == 0:
-        try:
-            random_nums = np.load(random_kappas)
-            loadedrand = True
-        except:
-            random_nums = np.empty(0)
-            loadedrand = False
-            if random_kappas == "ones":
-                print("Will use uniform uptake parameters = 1")
-            else:
-                print("Will create random uptake")
-        rand_str_loc = 0
+
+    rand_str_loc = 0
 
     for modelkey in models.keys():
         model = models[modelkey]
 
-        # exchng_metabolite_names = [met.name for met in model.metabolites if met.compartment == extracell]
+        if modelkey not in uptake_dicts.keys():
+            uptake_dicts[modelkey] = {}
+
         exchng_metabolite_ids =  [met.id for met in model.metabolites if met.compartment == extracell]
+
         exchng_reactions = []
         exchng_metabolite_names = []
         for met in exchng_metabolite_ids:
             exchng_metabolite_names += [model.metabolites.get_by_id(met).name]
             exchng_reactions += [rxn.id for rxn in model.metabolites.get_by_id(met).reactions if 'EX_' in rxn.id]
         nutrient_concentrations = {}
-        if len(uptake_dicts) ==0:
+
+        if len(uptake_dicts[modelkey]) < len(exchng_metabolite_ids):
+            try:
+                random_nums = np.load(random_kappas)
+                loadedrand = True
+            except:
+                random_nums = np.empty(0)
+                loadedrand = False
+                if random_kappas == "ones":
+                    print("Will use uniform uptake parameters = 1")
+                else:
+                    print("Will create random uptake")
+
             if loadedrand:
                 if rand_str_loc < len(random_nums):
-                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    uptake_rate1 = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
                     rand_str_loc = rand_str_loc + len(exchng_reactions)
-                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+                    uptkdict1 = dict(zip(exchng_metabolite_names,uptake_rate1))
                 else:
                     random_nums = np.concatenate([random_nums,np.random.rand(len(exchng_reactions))])
-                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    uptake_rate1 = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
                     rand_str_loc = rand_str_loc + len(exchng_reactions)
-                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+                    uptkdict1 = dict(zip(exchng_metabolite_names,uptake_rate1))
             else:
                 if random_kappas == "ones":
                     random_nums = np.concatenate([random_nums,np.ones(len(exchng_reactions))])
-                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    uptake_rate1 = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
                     rand_str_loc = rand_str_loc + len(exchng_reactions)
-                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+                    uptkdict1 = dict(zip(exchng_metabolite_names,uptake_rate1))
                 else:
                     random_nums = np.concatenate([random_nums,np.random.rand(len(exchng_reactions))])
-                    uptake_rate = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
+                    uptake_rate1 = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
                     rand_str_loc = rand_str_loc + len(exchng_reactions)
-                    uptkdict = dict(zip(exchng_metabolite_names,uptake_rate))
+                    uptkdict1 = dict(zip(exchng_metabolite_names,uptake_rate1))
+
+            uptkdict = {}
+            for ky in uptkdict1.keys():
+                if ky in uptake_dicts[modelkey].keys():
+                    uptkdict[ky] = uptake_dicts[modelkey][ky]
+                else:
+                    uptkdict[ky] = uptkdict1[ky]
+
 
         else:
             uptkdict = uptake_dicts[modelkey]
-            uptake_rate = [uptkdict[met] for met in exchng_metabolite_names]
+
+        uptake_rate = [uptkdict[met] for met in exchng_metabolite_names]
 
 
         i = 0
@@ -356,6 +372,7 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
             else:
                 nutrient_concentrations[er] = 0
             # uptake_rate+= [al]
+
 
 
 
@@ -1581,13 +1598,14 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     return biomasses,metabolite_bioms,internal_flux,t,ydotconts
 
 
-def sim_cobraPY_comm(desired_models,model_info,x_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = ''):
+def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = ''):
     '''
     paramters:
 
     * desired models = list - a list of keys for the models in the community to be simulated
     * model_info = dict - dictionary of model .json file paths.
     * x_init = dict - initial microbe biomasses, keyed by model keys. Any model not in dict will default to initial biomass 1
+    * y_init = dict - By default, the model uses the model.medium dictionary (averaging in the case of communities) to determine initial external metabolite concentration. With this helper function, those files cannot be manipulated. However, we can pass a dictionary y_init = {metabolite:concentration} that includes any initial concentration that we wish to change
     * death_rates = dict - death/dilution rates of microbes. Defaults to 0
     * uptake_dicts = {} - dict of dicts keyed by model key (from cobra_models dict) and metabolite. If empty, random parameters are generated
     * allinflow = float - default metabolite inflow rate
@@ -1608,6 +1626,7 @@ def sim_cobraPY_comm(desired_models,model_info,x_init = {},death_rates = {},upta
     '''
 
 
+    start_time = time.time()
 
     cobra_models = {}
 
@@ -1627,6 +1646,17 @@ def sim_cobraPY_comm(desired_models,model_info,x_init = {},death_rates = {},upta
 
 
     my_models,metabolite_list,initial_metabolites = prep_cobrapy_models(cobra_models,uptake_dicts = uptake_dicts, extracell = extracell, random_kappas = random_kappas)
+
+    for yi in y_init.keys():
+        if yi in initial_metabolites.keys():
+            initial_metabolites[yi] = y_init[yi]
+        else:
+            print(yi, " not in environement.")
+
+
+    print(initial_metabolites)
+
+
 
     print("Prepped all models successfully")
 
@@ -1715,3 +1745,13 @@ def sim_cobraPY_comm(desired_models,model_info,x_init = {},death_rates = {},upta
     print("--- %s minutes, %s seconds ---" % tottime)
 
     return x,y,v,t,usage
+
+
+
+def getMediaMetabolites(cobramod):
+    medli = list(cobramod.medium.keys())
+    metli = []
+    for med in medli:
+        mets = list(cobramod.reactions.get_by_id(med).metabolites)
+        metli += [m.name for m in mets]
+    return metli

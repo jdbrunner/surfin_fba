@@ -12,6 +12,7 @@ surfinFBA/examples/.DS_Store
 surfinFBA/examples/gurobi.log
 surfinFBA/examples/model_file_info.txt
 surfinFBA/examples/real_model_examples.py
+surfinFBA/examples/real_model_log.txt
 surfinFBA/examples/toy_model_examples.py
 surfinFBA/examples/sample_models/1221522.3.json
 surfinFBA/examples/sample_models/351746.6.json

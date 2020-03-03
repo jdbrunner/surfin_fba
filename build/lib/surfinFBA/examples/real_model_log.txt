@@ -1,0 +1,24 @@
+Surfin_FBA: Initializing with models
+Enterobacter aerogenes strain FDAARGOS_152
+Surfin_FBA: Prepping models
+prep_indv_model: initializing LP
+prep_indv_model: Adding constraints
+prep_indv_model: optimizing LP
+find_waves: LP Status: OPTIMAL
+prep_indv_model: Done in 0 minutes 3.453634023666382 seconds.
+Surfin_FBA: finding basis for Enterobacter aerogenes strain FDAARGOS_152
+find_waves: Initializing LP
+find_waves: Adding Variables
+find_waves: Added Kernal constraints in 49.86738896369934 seconds.
+find_waves: Removing/Adding Constraints
+find_waves: Added new constraints in 27.746907711029053 seconds.
+find_waves: optimizing with 2385 constraints
+find_waves: LP Status: OPTIMAL
+find_waves: Found Basis, Computing QR Decomposition
+find_waves: Done  in 80.11307215690613 seconds.
+Surfin_FBA: Models prepped and initial basis found in 1.0 minutes, 23.575483083724976 seconds.
+Surfin_FBA: Simulating Forward
+Surfin_FBA: Complete  in 1 minutes, 57.494911909103394 seconds.
+Surfin_FBA: Initialization was 71.12969150694674% of computational time.
+Surfin_FBA: Reinitialization was 0.0% of computational time.
+Surfin_FBA: Required 0 reinitializations.
