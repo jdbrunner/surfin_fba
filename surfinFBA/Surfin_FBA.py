@@ -355,12 +355,12 @@ def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e'
                     uptkdict1 = dict(zip(exchng_metabolite_names,uptake_rate1))
             else:
                 if random_kappas == "ones":
-                    random_nums = np.concatenate([random_nums,np.ones(len(exchng_reactions))])
+                    random_nums = np.concatenate([random_nums,np.ones(rand_str_loc+len(exchng_reactions))])
                     uptake_rate1 = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
                     rand_str_loc = rand_str_loc + len(exchng_reactions)
                     uptkdict1 = dict(zip(exchng_metabolite_names,uptake_rate1))
                 else:
-                    random_nums = np.concatenate([random_nums,np.random.rand(len(exchng_reactions))])
+                    random_nums = np.concatenate([random_nums,np.random.rand(rand_str_loc+len(exchng_reactions))])
                     uptake_rate1 = random_nums[rand_str_loc:(rand_str_loc + len(exchng_reactions))]
                     rand_str_loc = rand_str_loc + len(exchng_reactions)
                     uptkdict1 = dict(zip(exchng_metabolite_names,uptake_rate1))
@@ -375,6 +375,7 @@ def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e'
 
         else:
             uptkdict = uptake_dicts[modelkey]
+
 
         uptake_rate = [uptkdict[met] for met in exchng_metabolite_names]
 
