@@ -1678,7 +1678,7 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
         if model in media.keys():
             if isinstance(media[model],dict):
                 tmp_medium = {}
-                exc = [rxn.id for rxn in cobra_models[model] if 'EX_' in rxn.id]
+                exc = [rxn.id for rxn in cobra_models[model].reactions if 'EX_' in rxn.id]
                 for ky in media[model].keys():
                     if ky in exc:
                         tmp_medium[ky] = media[model][ky]
