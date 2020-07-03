@@ -18,7 +18,8 @@ from joblib import Parallel, delayed, cpu_count
 import cobra as cb
 import matplotlib.pyplot as plt
 from cycler import cycler
-
+import copy
+import json
 
 # [Gamma1ar,Gamma2ar,lilgamma,internal_lower_bounds,internal_upper_bounds,kappas,exchng_lower_bounds]
 
@@ -288,11 +289,8 @@ def get_expr_coos(expr, var_indices):
 
 
 
-<<<<<<< HEAD
 def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e', random_kappas = "new"):
-=======
-def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas = "new",media_scale = 100):
->>>>>>> 7b6df915a77e5e45326574f7eb248aaeb6867586
+
 
     #can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolite1:val,metabolite2:val}}
 
@@ -388,11 +386,7 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
             al = uptake_rate[i]
             i += 1
             if er in model.medium.keys():
-<<<<<<< HEAD
                 nutrient_concentrations[er] = model.medium[er]/(al)
-=======
-                nutrient_concentrations[er] = model.medium[er]/(al*media_scale)
->>>>>>> 7b6df915a77e5e45326574f7eb248aaeb6867586
             else:
                 nutrient_concentrations[er] = 0
             # uptake_rate+= [al]
@@ -1295,12 +1289,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
         preps = dict([(i,model_list[i].prep_indv_model(y0,report_activity = 1,solver = solver1,flobj = flobj)) for i in range(len(model_list))])
 
 
-<<<<<<< HEAD
     if any(["failed to prep" in pva.astype(str) for pva in preps.values()]):
-=======
-
-    if "failed to prep" in [str(pva) for pva in preps.values()]:
->>>>>>> 7b6df915a77e5e45326574f7eb248aaeb6867586
         if report_activity:
             t2 = time.time() - t1
             minuts,sec = divmod(t2,60)
@@ -1638,12 +1627,12 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     return biomasses,metabolite_bioms,internal_flux,t,ydotconts
 
 
-def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = '',concurrent = False):
+def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = '',concurrent = False):
     '''
     paramters:
 
     * desired models = list - a list of keys for the models in the community to be simulated
-    * model_info = dict - dictionary of model .json file paths.
+    * model_info = pandasDF - pandas DF with model .json file paths under column "File", with  column "Species" for indexing.
     * x_init = dict - initial microbe biomasses, keyed by model keys. Any model not in dict will default to initial biomass 1
     * y_init = dict - By default, the model uses the model.medium dictionary (averaging in the case of communities) to determine initial external metabolite concentration. With this helper function, those files cannot be manipulated. However, we can pass a dictionary y_init = {metabolite:concentration} that includes any initial concentration that we wish to change
     * death_rates = dict - death/dilution rates of microbes. Defaults to 0
@@ -1671,8 +1660,8 @@ def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},deat
     cobra_models = {}
 
     for mod in desired_models:
-        if mod in model_info.keys():
-            flnm = model_info[mod]
+        if any(model_info.Species == mod):
+            flnm = model_info.loc[model_info.Species == mod,'File'].iloc[0]
             cobra_models[mod] = cb.io.load_json_model(flnm)
             if not cobra_models[mod].name:
                 cobra_models[mod].name = mod
@@ -1683,9 +1672,29 @@ def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},deat
     print("Loaded " + str(len(cobra_models)) + " models successfully")
 
 
+    model_media = {}
+    for model in cobra_models:
+        if model in media.keys():
+            if isinstance(media[model],dict):
+                model_media[model] = media[model]
+                cobra_models[model].medium = model_media[model]
+            elif media[model] == "minimal":
+                mxg = cobra_models[model].slim_optimize()
+                min_med = cb.medium.minimal_medium(cobra_models[model],mxg,minimize_components = True)
+                cobra_models[model].medium = min_med
+                model_media[model] = min_med
+                cobra_models[model].medium = model_media[model]
+            else:
+                model_media[model] = cobra_models[model].medium
+        else:
+            model_media[model] = cobra_models[model].medium
 
 
-    my_models,metabolite_list,initial_metabolites = prep_cobrapy_models(cobra_models,uptake_dicts = uptake_dicts, extracell = extracell, random_kappas = random_kappas)
+
+
+    my_models,metabolite_list,initial_metabolites = prep_cobrapy_models(cobra_models,model_meds = model_media,random_kappas=random_kappas)
+
+
 
     for yi in y_init.keys():
         if yi in initial_metabolites.keys():
@@ -1727,7 +1736,9 @@ def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},deat
     #print(initial_metabolites)
 
     ###USAGE: Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,model_names = [],metabolite_names = [],ptimes = True, report_activity = True, detail_activity = True, initres = 0.001,enoughalready = 10)
-    with open("real_model_log.txt",'w') as logfl:
+    with open(save_fl + "_log.txt",'w') as logfl:
+        logfl.write("Simulating " + " ".join(desired_models) + "\n")
+        logfl.write(str(initial_metabolites) + '\n')
         x,y,v,t,usage = Surfin_FBA(my_models,x0,initial_metabolites,met_in,met_out,endt,metabolite_names = metabolite_list,concurrent = concurrent,solver = 'both', flobj = logfl,report_activity = True, detail_activity = True)
     print("Simulation complete")
 
@@ -1758,8 +1769,12 @@ def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},deat
     if len(labels2) < 5:
         ax[1].legend(labels2,prop={'size': 14})
     if save:
-        fig.savefig(save_fl +'_fig_'+ ''.join(desired_models))
-        fig.close()
+
+        #fix names
+        joined_names = '-'.join([s.replace('.','') for s in desired_models])
+
+        fig.savefig(save_fl +'_fig_'+ joined_names)
+        plt.close()
         xj = copy.deepcopy(x)
         for xx in xj:
             xj[xx] = list(xj[xx])
