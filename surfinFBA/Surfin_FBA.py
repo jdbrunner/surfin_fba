@@ -35,7 +35,7 @@ class SurfMod:
             self.Name = ''.join([str(np.random.choice(list('abcdefg123456789'))) for n in range(5)])
         else:
             self.Name = Name
-        self.MatrixA =  np.concatenate([np.array(G1),-np.array(G1),np.eye(np.array(G1).shape[1]),-np.eye(np.array(G1).shape[1])],axis = 0)
+        self.MatrixA =  np.concatenate([-np.array(G1),np.array(G1),np.eye(np.array(G1).shape[1]),-np.eye(np.array(G1).shape[1])],axis = 0)
         self.statbds = np.concatenate([-np.array(elbs),np.array(iubs),-np.array(ilbs)])#np.empty(0)
         self.deathrate = deathrate
 
@@ -64,7 +64,7 @@ class SurfMod:
 
 
 
-            # MatrixA = np.concatenate([Gamma1,-Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0)
+            # MatrixA = np.concatenate([-Gamma1,Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0)
             upbds_exch = initial_N*alphas
 
             if report_activity:
@@ -111,15 +111,15 @@ class SurfMod:
             if status in statusdic.keys():
                 if report_activity:
                     try:
-                        flobj.write("find_waves: LP Status: " +  statusdic[status] + '\n')
+                        flobj.write("prep_indv_model: LP Status: " +  statusdic[status] + '\n')
                     except:
-                        print("find_waves: LP Status: ", statusdic[status])
+                        print("prep_indv_model: LP Status: ", statusdic[status])
             else:
                 if report_activity:
                     try:
-                        flobj.write("find_waves: LP Status: Other\n")
+                        flobj.write("prep_indv_model: LP Status: Other\n")
                     except:
-                        print("find_waves: LP Status: Other")
+                        print("prep_indv_model: LP Status: Other")
 
             if status == 2:
 
@@ -154,11 +154,11 @@ class SurfMod:
                 # self.statbds = static2
                 return wi#,(MatrixA,static2,alphas,Gamma1,Gamma2,obje,death)
             else:
-                return "failed to prep"
+                return np.array(["failed to prep"])
 
         elif solver == 'cp':
     #
-            MatrixA = np.concatenate([Gamma1,-Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0).astype(float)
+            MatrixA = MatrixA.astype(float)#np.concatenate([-Gamma1,Gamma1,np.eye(Gamma1.shape[1]),-np.eye(Gamma1.shape[1])],axis = 0).astype(float)
             Gamma2 = Gamma2.astype(float)
             upbds_exch = initial_N*alphas
 
@@ -191,7 +191,18 @@ class SurfMod:
                     print("prep_indv_model: Adding constraints")
 
             bdtypes = np.array(['L']*len(MatrixA) + ['E']*len(Gamma2))
-            bds_vec = np.concatenate([upbds_exch,-low_exch,up_int,-low_int,np.zeros(len(Gamma2))])
+
+            # print(upbds_exch)
+            # print('\n')
+            # print(-low_exch)
+            # # print('\n')
+            # # print(up_int)
+            # # print('\n')
+            # # print(-low_int)
+            # print(up_int[np.where(np.invert(0<=-low_int))])
+            # print(low_int[np.where(np.invert(0<=-low_int))])
+
+            bds_vec = np.concatenate([upbds_exch,-low_exch,up_int,-low_int,np.zeros(len(Gamma2))]).astype(float)
 
 
             g1p2 = [list(g) for g in MatrixA] + [list(g) for g in Gamma2]
@@ -211,15 +222,15 @@ class SurfMod:
             if status in statusdic.keys():
                 if report_activity:
                     try:
-                        flobj.write("find_waves: LP Status: " +  statusdic[status] + '\n')
+                        flobj.write("prep_indv_model: LP Status: " +  statusdic[status] + '\n')
                     except:
-                        print("find_waves: LP Status: ", statusdic[status])
+                        print("prep_indv_model: LP Status: ", statusdic[status])
             else:
                 if report_activity:
                     try:
-                        flobj.write("find_waves: LP Status: Other\n")
+                        flobj.write("prep_indv_model: LP Status: Other\n")
                     except:
-                        print("find_waves: LP Status: Other")
+                        print("prep_indv_model: LP Status: Other")
 
 
 
@@ -259,12 +270,12 @@ class SurfMod:
 
 
             else:
-                return "failed to prep"
+                return np.array(["failed to prep"])
 
 
         else:
             print("Please select solver Gurobi: 'gb' or CPlex: 'cp'")
-            return "failed to prep"
+            return np.array(["failed to prep"])
 
 
 
@@ -277,7 +288,7 @@ def get_expr_coos(expr, var_indices):
 
 
 
-def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas = "new"):
+def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e', random_kappas = "new"):
 
     #can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolite1:val,metabolite2:val}}
 
@@ -304,13 +315,18 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
         if modelkey not in uptake_dicts.keys():
             uptake_dicts[modelkey] = {}
 
-        exchng_metabolite_ids =  [met.id for met in model.metabolites if met.compartment == extracell]
+        try:
+            exchng_reactions = list(model_meds[modelkey].keys())
+        except:
+            exchng_reactions = list(model.medium.keys())
 
-        exchng_reactions = []
-        exchng_metabolite_names = []
-        for met in exchng_metabolite_ids:
-            exchng_metabolite_names += [model.metabolites.get_by_id(met).name]
-            exchng_reactions += [rxn.id for rxn in model.metabolites.get_by_id(met).reactions if 'EX_' in rxn.id]
+
+        exchng_metabolite_ids = [metab.id for rx in exchng_reactions for metab in model.reactions.get_by_id(rx).reactants] #
+
+
+        exchng_metabolite_names = [model.metabolites.get_by_id(metab).name for metab in exchng_metabolite_ids]
+
+
         nutrient_concentrations = {}
 
         if len(uptake_dicts[modelkey]) < len(exchng_metabolite_ids):
@@ -368,7 +384,7 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
             al = uptake_rate[i]
             i += 1
             if er in model.medium.keys():
-                nutrient_concentrations[er] = model.medium[er]/(al*500)
+                nutrient_concentrations[er] = model.medium[er]/(al)
             else:
                 nutrient_concentrations[er] = 0
             # uptake_rate+= [al]
@@ -450,9 +466,12 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
         internal_metabs = np.array(Gamma.index)[[((met not in metabids[model.name]) and (met not in masterlist)) for met in Gamma.index]]
 
 
+        EyE = Gamma.loc[np.array(exchng_metabolite_ids),np.array(exchng_reactions)]
+        if (-EyE.values == np.eye(EyE.values.shape[0])).all():
+            Gamma1 = Gamma.loc[np.array(mastertoids),internal_reactions]
+        else:
+            Gamma1 = -Gamma.loc[np.array(mastertoids),internal_reactions]
 
-
-        Gamma1 = Gamma.loc[np.array(mastertoids),internal_reactions]
 
         # =============================================================================
 
@@ -476,7 +495,7 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
         exchng_lower_bounds = np.array([-model.reactions.get_by_id(nametorxnid[model.name][nm]).bounds[1] if nm in real_reactions else 0 for nm in masterlist])
 
         internal_upper_bounds = np.array([rxn.bounds[1] for rxn in model.reactions if rxn.id not in exrn[model.name]])
-        internal_lower_bounds = np.array([rxn.bounds[0] for rxn in model.reactions if rxn.id not in exrn[model.name]])
+        internal_lower_bounds = np.array([min(0,rxn.bounds[0]) for rxn in model.reactions if rxn.id not in exrn[model.name]])
 
 
         kappas = np.array([urts[model.name][nm] if nm in urts[model.name].keys() else 0 for nm in masterlist])
@@ -1059,7 +1078,7 @@ def evolve_sys2(t,y,surfmod):##Computes xdot for an organism, and that organism'
     v = y[len(alphas)+1:]
     #compute xdot and ydot
     xd = np.array([x*(np.dot(v,lilg) - death)])
-    Nd = -x*np.dot(Gamma1,v)
+    Nd = x*np.dot(Gamma1,v)
 
     return [xd,Nd]
 
@@ -1118,23 +1137,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
 
     '''
 
-    if solver =='both':
-        try:
-            dir(cp)
-            dir(gb)
-            solver1 = 'cp'
-            solver2 = 'gb'
-        except:
-            try:
-                dir(gb)
-                solver1 = 'gb'
-                solver2 = 'gb'
-                print('Cplex not found, using Gurobi')
-            except:
-                solver1 = 'cp'
-                solver2 = 'cp'
-                print('Gurobi not found, using Cplex')
-    elif solver == 'gb':
+    if solver == 'gb':
         try:
             dir(gb)
             solver1 = 'gb'
@@ -1152,6 +1155,22 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
             print('Cplex not found, using Gurobi')
             solver1 = 'gb'
             solver2 = 'gb'
+    else:
+        try:
+            dir(cp)
+            dir(gb)
+            solver1 = 'cp'
+            solver2 = 'gb'
+        except:
+            try:
+                dir(gb)
+                solver1 = 'gb'
+                solver2 = 'gb'
+                print('Cplex not found, using Gurobi')
+            except:
+                solver1 = 'cp'
+                solver2 = 'cp'
+                print('Gurobi not found, using Cplex')
 
 
     mess = 'Complete'
@@ -1268,8 +1287,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
         preps = dict([(i,model_list[i].prep_indv_model(y0,report_activity = 1,solver = solver1,flobj = flobj)) for i in range(len(model_list))])
 
 
-
-    if "failed to prep" in [list(pva) for pva in preps.values()]:
+    if any(["failed to prep" in pva.astype(str) for pva in preps.values()]):
         if report_activity:
             t2 = time.time() - t1
             minuts,sec = divmod(t2,60)
@@ -1278,7 +1296,6 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
             except:
                 print("Surfin_FBA: Failed to prep models  in ",int(minuts)," minutes, ",sec," seconds.")
         return None,None,None,None,None
-
 
     yd0 = sum([-x0[i]*np.dot(model_list[i].Gamma1,preps[i]) for i in range(len(model_list))])
     # paramlist1 = [preps[i][1] for i in range(len(model_list))] #
@@ -1365,7 +1382,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     dfba.set_f_params(parameters)
     dfba.set_initial_value(ics,0)
 
-    chk_round = 8
+    chk_round = 5
     # initres = 0.01: now a passed in option
     resolution = initres
     # enoughalready = 10 #how small to let resolution get before giving up. (-log) now a passed in option
@@ -1374,6 +1391,8 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     y = [y0]###list of arrays of ys
     v = [initial_vs]### List of list of arrays of vs. So v[i][j][k] is v[k] for organism x[j] and time t[i]
     t = [0]
+
+
 
     ydparts = [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),model_list[i])[1] for i in range(len(model_list))]]### List of list of arrays of vs. So ydpart[i][j][k] is organism x[j]'s contribution to ydot[k] at time t[i]
 
@@ -1419,7 +1438,13 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
             model_list[j].statbds[upperatlower_new[j]] = -(model_list[j].uptakes*y_t)[upperatlower_new[j]]
             model_list[j].statbds[(no_longer,)] = -lbds_ex[(no_longer,)]
 
+
             breakers += [np.dot(model_list[j].MatrixA,v_t[j]).round(chk_round) <= np.concatenate([model_list[j].uptakes*y_t,model_list[j].statbds]).round(chk_round)]
+
+            # print("X")
+            # print(np.dot(model_list[j].MatrixA,v_t[j]).round(chk_round)[np.invert(breakers[0])])
+            # print(np.concatenate([model_list[j].uptakes*y_t,model_list[j].statbds]).round(chk_round)[np.invert(breakers[0])])
+            # print('\n')
 
             ok[j] = np.all(breakers[j]) and np.all(np.dot(model_list[j].Gamma2,v_t[j]).round(chk_round) ==0)
 
@@ -1432,6 +1457,8 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
             y += [y_t]
             v += [v_t]
             t += [dfba.t]
+
+
             ydparts += [[evolve_sys2(t[-1],np.concatenate([[x[-1][i]],y[-1],v[-1][i]]),model_list[i])[1] for i in range(len(model_list))]]
             notmoving = False
             if resolution < initres:
