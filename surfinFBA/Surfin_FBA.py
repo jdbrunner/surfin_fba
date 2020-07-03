@@ -1677,8 +1677,14 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
     for model in cobra_models:
         if model in media.keys():
             if isinstance(media[model],dict):
-                model_media[model] = media[model]
-                cobra_models[model].medium = model_media[model]
+                tmp_medium = {}
+                exc = [rxn.id for rxn in cobra_models[model] if 'EX_' in rxn.id]
+                for ky in media[model].keys():
+                    if ky in exc:
+                        tmp_medium[ky] = media[model][ky]
+                model_media[model] = tmp_medium
+                cobra_models[model].medium = tmp_medium
+
             elif media[model] == "minimal":
                 mxg = cobra_models[model].slim_optimize()
                 min_med = cb.medium.minimal_medium(cobra_models[model],mxg,minimize_components = True)
