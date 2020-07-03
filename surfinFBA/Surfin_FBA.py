@@ -288,7 +288,11 @@ def get_expr_coos(expr, var_indices):
 
 
 
+<<<<<<< HEAD
 def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e', random_kappas = "new"):
+=======
+def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas = "new",media_scale = 100):
+>>>>>>> 7b6df915a77e5e45326574f7eb248aaeb6867586
 
     #can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolite1:val,metabolite2:val}}
 
@@ -384,7 +388,11 @@ def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e'
             al = uptake_rate[i]
             i += 1
             if er in model.medium.keys():
+<<<<<<< HEAD
                 nutrient_concentrations[er] = model.medium[er]/(al)
+=======
+                nutrient_concentrations[er] = model.medium[er]/(al*media_scale)
+>>>>>>> 7b6df915a77e5e45326574f7eb248aaeb6867586
             else:
                 nutrient_concentrations[er] = 0
             # uptake_rate+= [al]
@@ -1287,7 +1295,12 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
         preps = dict([(i,model_list[i].prep_indv_model(y0,report_activity = 1,solver = solver1,flobj = flobj)) for i in range(len(model_list))])
 
 
+<<<<<<< HEAD
     if any(["failed to prep" in pva.astype(str) for pva in preps.values()]):
+=======
+
+    if "failed to prep" in [str(pva) for pva in preps.values()]:
+>>>>>>> 7b6df915a77e5e45326574f7eb248aaeb6867586
         if report_activity:
             t2 = time.time() - t1
             minuts,sec = divmod(t2,60)
@@ -1625,7 +1638,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     return biomasses,metabolite_bioms,internal_flux,t,ydotconts
 
 
-def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = ''):
+def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = '',concurrent = False):
     '''
     paramters:
 
@@ -1681,7 +1694,7 @@ def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},deat
             print(yi, " not in environement.")
 
 
-    print(initial_metabolites)
+    #print(initial_metabolites)
 
 
 
@@ -1710,10 +1723,20 @@ def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},deat
 
 
     print("Running simulation")
+
+    #print(initial_metabolites)
+
     ###USAGE: Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,model_names = [],metabolite_names = [],ptimes = True, report_activity = True, detail_activity = True, initres = 0.001,enoughalready = 10)
     with open("real_model_log.txt",'w') as logfl:
-        x,y,v,t,usage = Surfin_FBA(my_models,x0,initial_metabolites,met_in,met_out,endt,metabolite_names = metabolite_list,concurrent = False,solver = 'both', flobj = logfl,report_activity = True, detail_activity = True)
+        x,y,v,t,usage = Surfin_FBA(my_models,x0,initial_metabolites,met_in,met_out,endt,metabolite_names = metabolite_list,concurrent = concurrent,solver = 'both', flobj = logfl,report_activity = True, detail_activity = True)
     print("Simulation complete")
+
+    y2 = {}
+    if len(y_init):
+        for met in y_init.keys():
+            y2[met] = y[met]
+    else:
+        y2 = y
 
 
     print("Making Plots")
@@ -1729,10 +1752,11 @@ def sim_cobraPY_comm(desired_models,model_info,endt,x_init = {},y_init = {},deat
         ax[0].plot(t,tc)
         labels1 +=[nm]
     ax[0].legend(labels1,prop={'size': 14})
-    for nm,tc in y.items():
+    for nm,tc in y2.items():
         ax[1].plot(t,tc)
         labels2 +=[nm]
-    # ax[1].legend(labels2,prop={'size': 20})
+    if len(labels2) < 5:
+        ax[1].legend(labels2,prop={'size': 14})
     if save:
         fig.savefig(save_fl +'_fig_'+ ''.join(desired_models))
         fig.close()
