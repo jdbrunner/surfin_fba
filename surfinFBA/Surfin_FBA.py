@@ -289,7 +289,7 @@ def get_expr_coos(expr, var_indices):
 
 
 
-def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e', random_kappas = "new"):
+def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas = "new"):
 
 
     #can provide metabolite uptake dictionary as dict of dicts {model_key1:{metabolite1:val,metabolite2:val}}
@@ -317,10 +317,10 @@ def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e'
         if modelkey not in uptake_dicts.keys():
             uptake_dicts[modelkey] = {}
 
-        try:
-            exchng_reactions = list(model_meds[modelkey].keys())
-        except:
-            exchng_reactions = list(model.medium.keys())
+        # try:
+        #     exchng_reactions = list(model_meds[modelkey].keys())
+        # except:
+        exchng_reactions = list(model.medium.keys())
 
 
         exchng_metabolite_ids = [metab.id for rx in exchng_reactions for metab in model.reactions.get_by_id(rx).reactants] #
@@ -331,7 +331,9 @@ def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e'
 
         nutrient_concentrations = {}
 
-        if len(uptake_dicts[modelkey]) < len(exchng_metabolite_ids):
+
+
+        if len(uptake_dicts[modelkey]) < len(exchng_reactions):#ones or random numbers
             try:
                 random_nums = np.load(random_kappas)
                 loadedrand = True
@@ -374,9 +376,14 @@ def prep_cobrapy_models(models,model_meds = {},uptake_dicts = {},extracell = 'e'
 
 
         else:
-            uptkdict = uptake_dicts[modelkey]
+            ##Translate uptake dicts from reaction id to metabolite name.
+            uptkdict = {}
+            for rxn in uptake_dicts[modelkey]:
+                metabs = [metab.name for metab in model.reactions.get_by_id(rxn).reactants]
+                for met in metabs:
+                    uptkdict[met] = uptake_dicts[modelkey][rxn]
 
-
+        # print(uptkdict)
         uptake_rate = [uptkdict[met] for met in exchng_metabolite_names]
 
 
@@ -529,8 +536,8 @@ def find_waves(y,v,bddts,surfmodel,headsup = [], model = None,report_activity = 
     bddts must be 0 (for internal bound) or kappa_j ydot_j
 
     MatA is
-    [Gamma1 ]
-    [-Gamma1]
+    [-Gamma1 ]
+    [Gamma1]
     [   I   ]
     [  -I   ]
     where Gamma1 is GammaStar and Gamma2 is GammaDagger
@@ -999,6 +1006,8 @@ def find_waves(y,v,bddts,surfmodel,headsup = [], model = None,report_activity = 
         print("find_waves: Returning BAD LP, too many basis vectors.")
         return 'BAD LP'
 
+
+
     # print('find_waves: Done')
     if report_activity:
         try:
@@ -1259,7 +1268,6 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     met_in = np.array(met_in)
     met_out = np.array(met_out)
 
-
     yd0 = np.zeros(len(y0))
     if report_activity:
         try:
@@ -1300,7 +1308,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
                 print("Surfin_FBA: Failed to prep models  in ",int(minuts)," minutes, ",sec," seconds.")
         return None,None,None,None,None
 
-    yd0 = sum([-x0[i]*np.dot(model_list[i].Gamma1,preps[i]) for i in range(len(model_list))])
+    yd0 = sum([x0[i]*np.dot(model_list[i].Gamma1,preps[i]) for i in range(len(model_list))])
     # paramlist1 = [preps[i][1] for i in range(len(model_list))] #
     initial_vs = [preps[i] for i in range(len(model_list))]
 
@@ -1319,6 +1327,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
 
         t_re = time.time()
 
+
         lbds_ex = model_list[i].exchgLB.astype(float)#lbds_li[i]
         lbds_ex_min = np.minimum(model_list[i].exchgLB,model_list[i].uptakes*y0)#lbds_m_li[i]
 
@@ -1336,6 +1345,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
         stati[upperatlower[i]] = -exup_mov[upperatlower[i]]
 
         bddts0 = np.concatenate([exup_mov,stati])
+
 
         if report_activity:
             try:
@@ -1424,12 +1434,16 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
         v_t = [compute_v(unpacked[1],model_list[i].uptakes,model_list[i].statbds,len(model_list[i].Gamma2),bases[i]) for i in range(len(model_list))]
 
 
+
 ###################################### Make sure the solution is still feasible
         ok = np.empty(len(model_list), dtype = bool)
         breakers = []
         upperatlower_new = []
         for j in range(len(model_list)):
 
+            # ydot = x_t*np.dot(model_list[j].Gamma1,v_t[j])
+            # vdot = compute_v(ydot,model_list[j].uptakes,model_list[j].statbds,len(model_list[j].Gamma2),bases[j])
+            # print(np.dot(model_list[j].MatrixA,vdot)[1845])
 
 
             #Here, we can handle lower bounds greater than 0 by having them match the upper bounds. However, that means
@@ -1442,7 +1456,11 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
             model_list[j].statbds[(no_longer,)] = -lbds_ex[(no_longer,)]
 
 
+
             breakers += [np.dot(model_list[j].MatrixA,v_t[j]).round(chk_round) <= np.concatenate([model_list[j].uptakes*y_t,model_list[j].statbds]).round(chk_round)]
+
+
+            # print(np.dot(model_list[j].MatrixA,v_t[j]).round(chk_round)[1845],np.concatenate([model_list[j].uptakes*y_t,model_list[j].statbds]).round(chk_round)[1845],breakers[-1][1845])
 
             # print("X")
             # print(np.dot(model_list[j].MatrixA,v_t[j]).round(chk_round)[np.invert(breakers[0])])
@@ -1505,7 +1523,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
             yd0 = np.zeros(len(y0))
             for j in range(len(model_list)):
                 ### Gamma^star_j is model_list[j].Gamma1
-                yd0 += -x[-1][j]*np.dot(model_list[j].Gamma1,v[-1][j])
+                yd0 += x[-1][j]*np.dot(model_list[j].Gamma1,v[-1][j])
             yd0 = yd0 + met_in - met_out*y[-1]
 
 
@@ -1628,7 +1646,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     return biomasses,metabolite_bioms,internal_flux,t,ydotconts
 
 
-def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = '',concurrent = False):
+def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = '',concurrent = False, solver = 'both'):
     '''
     paramters:
 
@@ -1673,7 +1691,7 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
     print("Loaded " + str(len(cobra_models)) + " models successfully")
 
 
-    model_media = {}
+    # model_media = {}
     for model in cobra_models:
         if model in media.keys():
             if isinstance(media[model],dict):
@@ -1682,24 +1700,21 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
                 for ky in media[model].keys():
                     if ky in exc:
                         tmp_medium[ky] = media[model][ky]
-                model_media[model] = tmp_medium
+                # model_media[model] = tmp_medium
                 cobra_models[model].medium = tmp_medium
 
             elif media[model] == "minimal":
                 mxg = cobra_models[model].slim_optimize()
                 min_med = cb.medium.minimal_medium(cobra_models[model],mxg,minimize_components = True)
                 cobra_models[model].medium = min_med
-                model_media[model] = min_med
+                # model_media[model] = min_med
                 cobra_models[model].medium = model_media[model]
-            else:
-                model_media[model] = cobra_models[model].medium
-        else:
-            model_media[model] = cobra_models[model].medium
 
 
 
 
-    my_models,metabolite_list,initial_metabolites = prep_cobrapy_models(cobra_models,model_meds = model_media,random_kappas=random_kappas)
+
+    my_models,metabolite_list,initial_metabolites = prep_cobrapy_models(cobra_models,uptake_dicts = uptake_dicts ,random_kappas=random_kappas)
 
 
 
@@ -1746,7 +1761,7 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
     with open(save_fl + "_log.txt",'w') as logfl:
         logfl.write("Simulating " + " ".join(desired_models) + "\n")
         logfl.write(str(initial_metabolites) + '\n')
-        x,y,v,t,usage = Surfin_FBA(my_models,x0,initial_metabolites,met_in,met_out,endt,metabolite_names = metabolite_list,concurrent = concurrent,solver = 'both', flobj = logfl,report_activity = True, detail_activity = True)
+        x,y,v,t,usage = Surfin_FBA(my_models,x0,initial_metabolites,met_in,met_out,endt,metabolite_names = metabolite_list,concurrent = concurrent,solver = solver, flobj = logfl,report_activity = True, detail_activity = True)
     print("Simulation complete")
 
     y2 = {}
@@ -1762,6 +1777,7 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
     ax[0].set_prop_cycle(cycler(color = ['green', 'red','blue']))
 
 
+
     labels1 = []
     labels2 = []
 
@@ -1775,6 +1791,9 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
         labels2 +=[nm]
     if len(labels2) < 5:
         ax[1].legend(labels2,prop={'size': 14})
+    #
+    # ax[0].set_ylim(bottom = 0)
+    # ax[1].set_ylim(bottom = 0)
     if save:
 
         #fix names
