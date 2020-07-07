@@ -1774,7 +1774,8 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
 
     print("Making Plots")
     fig,ax = plt.subplots(2,1,figsize = (10,10),tight_layout = True)
-    ax[0].set_prop_cycle(cycler(color = ['green', 'red','blue']))
+    if len(x) < 9
+        ax[0].set_prop_cycle(cycler(color = ['green', 'red','blue','purple','cyan','deeppink','goldenrod','slategray']))
 
 
 
