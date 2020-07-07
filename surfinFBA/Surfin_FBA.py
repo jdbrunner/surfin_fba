@@ -1395,7 +1395,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     dfba.set_f_params(parameters)
     dfba.set_initial_value(ics,0)
 
-    chk_round = 5
+    chk_round = 8
     # initres = 0.01: now a passed in option
     resolution = initres
     # enoughalready = 10 #how small to let resolution get before giving up. (-log) now a passed in option
