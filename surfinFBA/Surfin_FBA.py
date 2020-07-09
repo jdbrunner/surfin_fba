@@ -1122,7 +1122,7 @@ def evolve_comm(t,y,all_params):
 
     return np.concatenate([xds,Nds])
 
-def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'both',enoughalready = 10,flobj = None):
+def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], report_activity = False, detail_activity = False, initres = 0.001,concurrent = True, solver = 'both',enoughalready = 10,flobj = None,chk_round = 5):
     '''
         Surfin_FBA parameters:
         * model_list (positional) - list or dictionary of SurfMod objects (as returned by prep_cobrapy_models)
@@ -1395,7 +1395,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     dfba.set_f_params(parameters)
     dfba.set_initial_value(ics,0)
 
-    chk_round = 8
+
     # initres = 0.01: now a passed in option
     resolution = initres
     # enoughalready = 10 #how small to let resolution get before giving up. (-log) now a passed in option
