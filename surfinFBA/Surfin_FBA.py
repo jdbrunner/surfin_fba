@@ -475,8 +475,7 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
 
         internal_metabs = np.array(Gamma.index)[[((met not in metabids[model.name]) and (met not in masterlist)) for met in Gamma.index]]
 
-
-        EyE = Gamma.loc[np.array(exchng_metabolite_ids),np.array(exchng_reactions)]
+        EyE = Gamma.loc[np.array(metabids[model.name]),np.array(exrn[model.name])]
         if (-EyE.values == np.eye(EyE.values.shape[0])).all():
             Gamma1 = Gamma.loc[np.array(mastertoids),internal_reactions]
         else:
@@ -485,11 +484,9 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
 
         # =============================================================================
 
-
         Gamma2 = Gamma.loc[internal_metabs,internal_reactions]
         Gamma1ar = Gamma1.values
         Gamma2ar = Gamma2.values
-
 
 
         #Next we need the objective function that identifies growth - the flux that COBRA optimizes
@@ -1646,7 +1643,7 @@ def Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,metabolite_names = [], re
     return biomasses,metabolite_bioms,internal_flux,t,ydotconts
 
 
-def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = '',concurrent = False, solver = 'both'):
+def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_init = {},death_rates = {},uptake_dicts = {},allinflow = 0,alloutflow = 0,met_inflow = {},met_outflow = {}, extracell = 'e', random_kappas = "new", save = False,save_fl = '',concurrent = False, solver = 'both',met_plots = []):
     '''
     paramters:
 
@@ -1713,9 +1710,7 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
 
 
 
-
     my_models,metabolite_list,initial_metabolites = prep_cobrapy_models(cobra_models,uptake_dicts = uptake_dicts ,random_kappas=random_kappas)
-
 
 
     for yi in y_init.keys():
@@ -1758,9 +1753,22 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
     #print(initial_metabolites)
 
     ###USAGE: Surfin_FBA(model_list,x0,y0,met_in,met_out,endtime,model_names = [],metabolite_names = [],ptimes = True, report_activity = True, detail_activity = True, initres = 0.001,enoughalready = 10)
+
+    with open(save_fl + "_ic.txt",'w') as logfl:
+        logfl.write('initial biomass:\n' + str(x0) + '\n\n')
+        logfl.write('initial metabolites:\n' + str(initial_metabolites) + '\n\n')
+        logfl.write('death rates:\n' + str(death_rates) + '\n\n')
+        logfl.write('metabolite inflow:\n' + str(met_in) + '\n\n')
+        logfl.write('metabolite outflow:\n' + str(met_out) + '\n\n')
+
+
+
     with open(save_fl + "_log.txt",'w') as logfl:
-        logfl.write("Simulating " + " ".join(desired_models) + "\n")
-        logfl.write(str(initial_metabolites) + '\n')
+        # logfl.write("Simulating " + " ".join(desired_models) + "\n")
+        # logfl.write(str(initial_metabolites) + '\n')
+        logfl.write("xxxxxxxxxxxxxxxxxxxxxx - TEST SIZE "+ str(len(x0)) + " xxxxxxxxxxxxxxxxxxxxxx\n")
+        logfl.write("Running simulation\n")
+
         x,y,v,t,usage = Surfin_FBA(my_models,x0,initial_metabolites,met_in,met_out,endt,metabolite_names = metabolite_list,concurrent = concurrent,solver = solver, flobj = logfl,report_activity = True, detail_activity = True)
     print("Simulation complete")
 
@@ -1773,28 +1781,39 @@ def sim_cobraPY_comm(desired_models,model_info,endt,media = {},x_init = {},y_ini
 
 
     print("Making Plots")
-    fig,ax = plt.subplots(2,1,figsize = (10,10),tight_layout = True)
-    if len(x) < 9:
-        ax[0].set_prop_cycle(cycler(color = ['green', 'red','blue','purple','cyan','deeppink','goldenrod','slategray']))
+    if len(met_plots):
+        fig,ax = plt.subplots(2,1,figsize = (10,10),tight_layout = True)
+        if len(x) < 9:
+            ax[0].set_prop_cycle(cycler(color = ['green', 'red','blue','purple','cyan','deeppink','goldenrod','slategray']))
+
+        labels1 = []
+        labels2 = []
 
 
+        for nm,tc in x.items():
+            ax[0].plot(t,tc)
+            labels1 +=[nm]
+        ax[0].legend(labels1,prop={'size': 14})
+        for nm in met_plots:
+            tc = y2[nm]
+            ax[1].plot(t,tc)
+            labels2 +=[nm]
+        if len(labels2) < 5:
+            ax[1].legend(labels2,prop={'size': 14})
 
-    labels1 = []
-    labels2 = []
+    else:
+        fig,ax = plt.subplots(2,1,figsize = (10,10),tight_layout = True)
+        if len(x) < 9:
+            ax[0].set_prop_cycle(cycler(color = ['green', 'red','blue','purple','cyan','deeppink','goldenrod','slategray']))
+
+        labels1 = []
 
 
-    for nm,tc in x.items():
-        ax[0].plot(t,tc)
-        labels1 +=[nm]
-    ax[0].legend(labels1,prop={'size': 14})
-    for nm,tc in y2.items():
-        ax[1].plot(t,tc)
-        labels2 +=[nm]
-    if len(labels2) < 5:
-        ax[1].legend(labels2,prop={'size': 14})
-    #
-    # ax[0].set_ylim(bottom = 0)
-    # ax[1].set_ylim(bottom = 0)
+        for nm,tc in x.items():
+            ax.plot(t,tc)
+            labels1 +=[nm]
+        ax.legend(labels1,prop={'size': 14})
+
     if save:
 
         #fix names
