@@ -475,7 +475,12 @@ def prep_cobrapy_models(models,uptake_dicts = {},extracell = 'e', random_kappas 
 
         internal_metabs = np.array(Gamma.index)[[((met not in metabids[model.name]) and (met not in masterlist)) for met in Gamma.index]]
 
+
         EyE = Gamma.loc[np.array(metabids[model.name]),np.array(exrn[model.name])]
+
+
+
+
         if (-EyE.values == np.eye(EyE.values.shape[0])).all():
             Gamma1 = Gamma.loc[np.array(mastertoids),internal_reactions]
         else:
