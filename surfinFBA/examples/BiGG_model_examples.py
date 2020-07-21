@@ -6,7 +6,7 @@ import cobra as cb
 # import json
 import pandas as pd
 import sys
-sys.path.append("../surfin_fba")
+sys.path.append("../../")
 import surfinFBA as surf
 
 import copy
