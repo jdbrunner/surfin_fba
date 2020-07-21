@@ -1,8 +1,5 @@
 Species,ID,File,sourceURL
 E.coli,iJR904,modelsfromBiGG/sample_models/iJR904.json,http://bigg.ucsd.edu/models/iJR904
 S.cerevisiae,iND705,modelsfromBiGG/sample_models/iND750.json,http://bigg.ucsd.edu/models/iND750
-C.difficile,iCN900,modelsfromBiGG/sample_models/iCN900.json,http://bigg.ucsd.edu/models/iCN900
-H.pylori,iIT341,modelsfromBiGG/sample_models/iIT341.json,http://bigg.ucsd.edu/models/iIT341
 P.putida,iJN746,modelsfromBiGG/sample_models/iJN746.json,http://bigg.ucsd.edu/models/iJN746
 M.tuberculosis,iEK1008,modelsfromBiGG/sample_models/iEK1008.json,http://bigg.ucsd.edu/models/iEK1008
-S.enterica,STM_v1_0,modelsfromBiGG/sample_models/STM_v1_0.json,http://bigg.ucsd.edu/models/STM_v1_0
