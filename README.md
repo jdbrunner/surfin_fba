@@ -1,3 +1,5 @@
+**As of 6/5/2023, this version of SurfinFBA will is longer be supported. A new version will be available soon under the name MetConSIN**
+
 Dynamic FBA for use with COBRAPy metabolic models.
 
 To simulate a community of microbes given as .json CORBA models, you may use:
