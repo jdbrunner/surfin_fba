@@ -1,4 +1,4 @@
-**As of 6/5/2023, this version of SurfinFBA is longer be supported. Please use github.com/lanl/metconsin**
+**As of 6/5/2023, this version of SurfinFBA is longer be supported. Please use https://github.com/lanl/metconsin**
 
 Dynamic FBA for use with COBRAPy metabolic models.
 
